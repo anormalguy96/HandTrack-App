@@ -1,0 +1,14 @@
+{
+  "fontFamily": {
+    "display": "Playfair Display",
+    "sans": "system-ui"
+  },
+  "scale": {
+    "xs": 12,
+    "sm": 14,
+    "base": 16,
+    "lg": 18,
+    "xl": 22,
+    "2xl": 28
+  }
+}

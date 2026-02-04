@@ -1,0 +1,13 @@
+{
+  "brand": {
+    "accent": "#185e50",
+    "bgLight": "#ffffff",
+    "bgDark": "#0e1111",
+    "textLight": "#0f172a",
+    "textDark": "#e5e7eb"
+  },
+  "ui": {
+    "border": "rgba(0,0,0,0.12)",
+    "shadow": "rgba(0,0,0,0.08)"
+  }
+}

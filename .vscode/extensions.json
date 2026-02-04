@@ -1,0 +1,13 @@
+{
+  "recommendations": [
+    "dbaeumer.vscode-eslint",
+    "esbenp.prettier-vscode",
+    "redhat.java",
+    "vscjava.vscode-java-pack",
+    "ms-azuretools.vscode-docker",
+    "dart-code.dart-code",
+    "dart-code.flutter",
+    "ms-python.python",
+    "ms-python.vscode-pylance"
+  ]
+}
