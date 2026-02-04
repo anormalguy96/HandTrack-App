@@ -47,8 +47,8 @@ dependencies {
     implementation "androidx.camera:camera-view:$camerax"
 
     // MediaPipe Tasks Vision (Hand Landmarker)
-    // Google docs suggest using tasks-vision (often latest.release). :contentReference[oaicite:3]{index=3}
-    // Pin a known version for reproducibility. :contentReference[oaicite:4]{index=4}
+    // Google docs suggest using tasks-vision (often latest.release).
+    // Pin a known version for reproducibility.
     implementation "com.google.mediapipe:tasks-vision:0.10.29"
 
     implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
