@@ -1,56 +1,96 @@
-import { useEffect, useState } from "react";
-import { startFpsMeter } from "../../../benchmarks/web/raf_fps";
-
-const API = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8080";
+import { useEffect, useRef, useState } from "react";
+import { FilesetResolver, HandLandmarker } from "@mediapipe/tasks-vision";
 
 export default function App() {
-  const [fps, setFps] = useState<number>(0);
-  const [health, setHealth] = useState<any>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  useEffect(() => startFpsMeter(setFps), []);
+  const [fps, setFps] = useState(0);
+  const [ready, setReady] = useState(false);
 
-  async function loadHealth() {
-    const res = await fetch(`${API}/api/health`);
-    setHealth(await res.json());
-  }
+  useEffect(() => {
+    let mounted = true;
+    let handLandmarker: HandLandmarker | null = null;
+    let last = performance.now();
+    let ema = 0;
+
+    const start = async () => {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: false });
+      if (!videoRef.current) return;
+      videoRef.current.srcObject = stream;
+      await videoRef.current.play();
+
+      const vision = await FilesetResolver.forVisionTasks(
+        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.32/wasm"
+      );
+
+      handLandmarker = await HandLandmarker.createFromOptions(vision, {
+        baseOptions: {
+          modelAssetPath:
+            "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task",
+        },
+        runningMode: "VIDEO",
+        numHands: 1,
+      });
+
+      setReady(true);
+
+      const loop = async () => {
+        if (!mounted || !videoRef.current || !canvasRef.current || !handLandmarker) return;
+
+        const now = performance.now();
+        const dt = Math.max(1, now - last);
+        const inst = 1000 / dt;
+        ema = ema === 0 ? inst : (ema * 0.9 + inst * 0.1);
+        last = now;
+        setFps(ema);
+
+        const video = videoRef.current;
+        const canvas = canvasRef.current;
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+
+        const res = handLandmarker.detectForVideo(video, now);
+
+        const ctx = canvas.getContext("2d")!;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        ctx.fillStyle = "rgba(105,240,174,0.9)";
+        for (const hand of res.landmarks ?? []) {
+          for (const p of hand) {
+            ctx.beginPath();
+            ctx.arc(p.x * canvas.width, p.y * canvas.height, 5, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+
+        requestAnimationFrame(loop);
+      };
+
+      requestAnimationFrame(loop);
+    };
+
+    start().catch(console.error);
+
+    return () => {
+      mounted = false;
+      handLandmarker?.close();
+      const stream = videoRef.current?.srcObject as MediaStream | null;
+      stream?.getTracks().forEach((t) => t.stop());
+    };
+  }, []);
 
   return (
-    <div style={{ fontFamily: "system-ui", padding: 24, lineHeight: 1.4 }}>
-      <h1 style={{ margin: 0 }}>HandTrack Web</h1>
-      <p style={{ marginTop: 8, opacity: 0.8 }}>
-        Starter dashboard (FPS meter + API connectivity). Replace with admin console / demo hosting.
-      </p>
-
-      <div style={{ display: "flex", gap: 12, marginTop: 16, flexWrap: "wrap" }}>
-        <div style={{ border: "1px solid rgba(0,0,0,0.12)", borderRadius: 14, padding: 12, minWidth: 220 }}>
-          <div style={{ fontSize: 12, opacity: 0.7 }}>FPS</div>
-          <div style={{ fontSize: 28, fontWeight: 700 }}>{fps}</div>
-        </div>
-
-        <div style={{ border: "1px solid rgba(0,0,0,0.12)", borderRadius: 14, padding: 12, minWidth: 320 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div>
-              <div style={{ fontSize: 12, opacity: 0.7 }}>API</div>
-              <div style={{ fontWeight: 700 }}>{API}</div>
-            </div>
-            <button onClick={loadHealth} style={{ padding: "8px 10px", borderRadius: 12 }}>
-              Test /api/health
-            </button>
-          </div>
-          <pre style={{ marginTop: 10, fontSize: 12, opacity: 0.85, whiteSpace: "pre-wrap" }}>
-            {health ? JSON.stringify(health, null, 2) : "Click to fetch..."}
-          </pre>
-        </div>
+    <div style={{ padding: 16, color: "#fff", background: "#0B0D10", minHeight: "100vh" }}>
+      <h2 style={{ margin: 0, marginBottom: 8 }}>Box-of-Scraps — Web Hand Tracking</h2>
+      <div style={{ opacity: 0.8, marginBottom: 12 }}>
+        {ready ? `Running • FPS ${fps.toFixed(1)}` : "Loading model..."}
       </div>
 
-      <hr style={{ margin: "22px 0", opacity: 0.25 }} />
-
-      <h2 style={{ margin: 0 }}>Next</h2>
-      <ul>
-        <li>Integrate MediaPipe/WebAssembly demo pipeline (web)</li>
-        <li>Device profile viewer (FPS, throttling, tier)</li>
-        <li>Admin console (feature flags, placements, export quotas)</li>
-      </ul>
+      <div style={{ position: "relative", width: "min(900px, 100%)", aspectRatio: "16/9", border: "1px solid rgba(255,255,255,0.12)" }}>
+        <video ref={videoRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", transform: "scaleX(-1)" }} />
+        <canvas ref={canvasRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none", transform: "scaleX(-1)" }} />
+      </div>
     </div>
   );
 }

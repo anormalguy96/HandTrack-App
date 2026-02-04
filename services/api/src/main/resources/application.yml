@@ -1,26 +1,17 @@
 server:
-  port: ${API_PORT:8080}
+  port: 8080
 
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/${POSTGRES_DB:handtrack}
-    username: ${POSTGRES_USER:handtrack}
-    password: ${POSTGRES_PASSWORD:handtrack_dev_password}
+    url: jdbc:postgresql://localhost:5432/boxscraps
+    username: postgres
+    password: postgres
   jpa:
     hibernate:
       ddl-auto: update
-    properties:
-      hibernate:
-        jdbc:
-          time_zone: UTC
 
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info,metrics
-
-app:
-  adsServiceBaseUrl: http://localhost:${ADS_SERVICE_PORT:8090}
-  privacy:
-    uploadFrames: false
+security:
+  jwt:
+    # IMPORTANT: use a long random secret (>= 32 chars)
+    secret: "CHANGE_ME_TO_A_LONG_RANDOM_SECRET_32+_CHARS"
+    accessTtlSeconds: 900

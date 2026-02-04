@@ -10,6 +10,11 @@ dependencies:
   flutter:
     sdk: flutter
   http: ^1.2.2
+  handtrack_engine:
+    path: ../../engine/flutter_plugin/handtrack_engine
+  shared_preferences: ^2.2.3
+  google_mobile_ads: ^5.1.0
+
 
 dev_dependencies:
   flutter_test:
