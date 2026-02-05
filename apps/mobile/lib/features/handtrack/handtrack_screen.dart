@@ -284,10 +284,11 @@ class _HandtrackScreenState extends State<HandtrackScreen> {
                               ? Colors.redAccent
                               : Colors.white70),
                       onPressed: () => setState(() {
-                        if (_voiceController.isListening)
+                        if (_voiceController.isListening) {
                           _voiceController.stopListening();
-                        else
+                        } else {
                           _voiceController.startListening();
+                        }
                       }),
                       visualDensity: VisualDensity.compact,
                     ),
@@ -348,7 +349,7 @@ class _HandtrackScreenState extends State<HandtrackScreen> {
                     end: Alignment.bottomRight,
                   ),
                   border: Border.all(color: Colors.white.withOpacity(0.2)),
-                  boxShadow: [
+                  boxShadow: const [
                     BoxShadow(
                         color: Colors.black26, blurRadius: 10, spreadRadius: 1)
                   ]),
