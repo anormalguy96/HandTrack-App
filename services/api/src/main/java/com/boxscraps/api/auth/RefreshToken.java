@@ -7,26 +7,27 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "refresh_token")
-class RefreshToken {
+public class RefreshToken {
 
     @Id
     @GeneratedValue
-    UUID id;
+    public UUID id;
 
     @Column(nullable = false)
-    UUID userId;
+    public UUID userId;
 
     // store HASHED token only
     @Column(nullable = false, unique = true, length = 64)
-    String tokenSha256;
+    public String tokenSha256;
 
     @Column(nullable = false)
-    Instant expiresAt;
+    public Instant expiresAt;
 
     @Column(nullable = false)
-    boolean revoked;
+    public boolean revoked;
 
-    protected RefreshToken() {}
+    protected RefreshToken() {
+    }
 
     RefreshToken(UUID userId, String tokenSha256, Instant expiresAt) {
         this.userId = userId;

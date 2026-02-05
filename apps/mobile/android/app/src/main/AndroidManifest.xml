@@ -3,6 +3,7 @@
 
     <!-- Camera permission for hand tracking -->
     <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <!-- Declare camera feature (required=true means app needs a camera) -->
     <uses-feature

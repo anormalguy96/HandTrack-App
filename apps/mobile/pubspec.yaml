@@ -14,7 +14,11 @@ dependencies:
     path: ../../engine/flutter_plugin/handtrack_engine
   shared_preferences: ^2.2.3
   google_mobile_ads: ^5.1.0
-
+  share_plus: any
+  speech_to_text: any
+  flutter_tts: any
+  path_provider: any
+  screenshot: any
 
 dev_dependencies:
   flutter_test:

@@ -6,24 +6,25 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "app_user")
-class AppUser {
+public class AppUser {
 
     @Id
     @GeneratedValue
-    UUID id;
+    public UUID id;
 
     @Column(nullable = false, unique = true)
-    String email;
+    public String email;
 
     @Column(nullable = false)
-    String passwordHash;
+    public String passwordHash;
 
     @Column(nullable = false)
-    String displayName;
+    public String displayName;
 
-    protected AppUser() {}
+    public AppUser() {
+    }
 
-    AppUser(String email, String passwordHash, String displayName) {
+    public AppUser(String email, String passwordHash, String displayName) {
         this.email = email;
         this.passwordHash = passwordHash;
         this.displayName = displayName;

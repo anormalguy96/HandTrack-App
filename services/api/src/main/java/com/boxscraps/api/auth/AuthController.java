@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/auth")
-class AuthController {
+public class AuthController {
 
     private final AuthService auth;
 
@@ -33,10 +33,10 @@ class AuthController {
     ResponseEntity<AuthResponse> refresh(
             @RequestBody(required = false) RefreshRequest req,
             @CookieValue(name = "rt", required = false) String cookieRt,
-            HttpServletResponse res
-    ) {
+            HttpServletResponse res) {
         var token = (req != null && req.refreshToken() != null) ? req.refreshToken() : cookieRt;
-        if (token == null) return ResponseEntity.badRequest().build();
+        if (token == null)
+            return ResponseEntity.badRequest().build();
         var out = auth.refresh(token);
         setRefreshCookie(res, out.refreshToken());
         return ResponseEntity.ok(out);
@@ -46,10 +46,10 @@ class AuthController {
     ResponseEntity<Void> logout(
             @RequestBody(required = false) RefreshRequest req,
             @CookieValue(name = "rt", required = false) String cookieRt,
-            HttpServletResponse res
-    ) {
+            HttpServletResponse res) {
         var token = (req != null && req.refreshToken() != null) ? req.refreshToken() : cookieRt;
-        if (token != null) auth.logout(token);
+        if (token != null)
+            auth.logout(token);
         clearRefreshCookie(res);
         return ResponseEntity.ok().build();
     }

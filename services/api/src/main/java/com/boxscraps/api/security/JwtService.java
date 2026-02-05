@@ -11,20 +11,19 @@ import java.time.Instant;
 import java.util.Date;
 
 @Service
-class JwtService {
+public class JwtService {
 
     private final SecretKey key;
     private final long accessTtlSeconds;
 
     JwtService(
             @Value("${security.jwt.secret}") String secret,
-            @Value("${security.jwt.accessTtlSeconds:900}") long accessTtlSeconds
-    ) {
+            @Value("${security.jwt.accessTtlSeconds:900}") long accessTtlSeconds) {
         this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
         this.accessTtlSeconds = accessTtlSeconds;
     }
 
-    String issueAccessToken(String userId) {
+    public String issueAccessToken(String userId) {
         var now = Instant.now();
         return Jwts.builder()
                 .subject(userId)
@@ -34,7 +33,7 @@ class JwtService {
                 .compact();
     }
 
-    String tryGetSubject(String token) {
+    public String tryGetSubject(String token) {
         try {
             return Jwts.parser().verifyWith(key).build().parseSignedClaims(token).getPayload().getSubject();
         } catch (Exception e) {
@@ -42,7 +41,7 @@ class JwtService {
         }
     }
 
-    boolean isValid(String token) {
+    public boolean isValid(String token) {
         return tryGetSubject(token) != null;
     }
 }

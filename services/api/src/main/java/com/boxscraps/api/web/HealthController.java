@@ -7,12 +7,13 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api")
-class HealthController {
+public class HealthController {
 
   @GetMapping("/health")
   Object health() {
     return new HealthResponse(true, Instant.now().toString());
   }
 
-  record HealthResponse(boolean ok, String now) {}
+  record HealthResponse(boolean ok, String now) {
+  }
 }

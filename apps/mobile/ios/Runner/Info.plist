@@ -60,5 +60,11 @@
 	<key>NSCameraUsageDescription</key>
 	<string>This app uses the camera for hand tracking.</string>
 
+	<key>NSMicrophoneUsageDescription</key>
+	<string>This app uses the microphone for voice commands.</string>
+
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>This app uses speech recognition to process your voice commands.</string>
+
 </dict>
 </plist>

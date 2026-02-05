@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api")
-class ConfigController {
+public class ConfigController {
 
   @Value("${app.adsServiceBaseUrl}")
   String adsServiceBaseUrl;
@@ -20,5 +20,6 @@ class ConfigController {
     return new ConfigResponse("0.1.0", adsServiceBaseUrl, uploadFrames);
   }
 
-  record ConfigResponse(String version, String adsServiceBaseUrl, boolean uploadFrames) {}
+  record ConfigResponse(String version, String adsServiceBaseUrl, boolean uploadFrames) {
+  }
 }

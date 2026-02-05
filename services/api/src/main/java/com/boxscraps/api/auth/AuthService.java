@@ -12,27 +12,31 @@ import java.util.HexFormat;
 import java.util.UUID;
 
 @Service
-class AuthService {
+public class AuthService {
 
     private final AppUserRepository users;
     private final RefreshTokenRepository refreshTokens;
     private final PasswordEncoder encoder;
     private final JwtService jwtService;
 
-    AuthService(AppUserRepository users, RefreshTokenRepository refreshTokens, PasswordEncoder encoder, JwtService jwtService) {
+    AuthService(AppUserRepository users, RefreshTokenRepository refreshTokens, PasswordEncoder encoder,
+            JwtService jwtService) {
         this.users = users;
         this.refreshTokens = refreshTokens;
         this.encoder = encoder;
         this.jwtService = jwtService;
     }
 
-    AuthResponse register(RegisterRequest req) {
-        users.findByEmailIgnoreCase(req.email()).ifPresent(u -> { throw new IllegalArgumentException("Email already used"); });
-        var user = users.save(new AppUser(req.email().toLowerCase(), encoder.encode(req.password()), req.displayName()));
+    public AuthResponse register(RegisterRequest req) {
+        users.findByEmailIgnoreCase(req.email()).ifPresent(u -> {
+            throw new IllegalArgumentException("Email already used");
+        });
+        var user = users
+                .save(new AppUser(req.email().toLowerCase(), encoder.encode(req.password()), req.displayName()));
         return issueTokens(user.id);
     }
 
-    AuthResponse login(LoginRequest req) {
+    public AuthResponse login(LoginRequest req) {
         var user = users.findByEmailIgnoreCase(req.email())
                 .orElseThrow(() -> new IllegalArgumentException("Invalid credentials"));
         if (!encoder.matches(req.password(), user.passwordHash)) {
@@ -41,7 +45,7 @@ class AuthService {
         return issueTokens(user.id);
     }
 
-    AuthResponse refresh(String rawRefreshToken) {
+    public AuthResponse refresh(String rawRefreshToken) {
         var hash = sha256(rawRefreshToken);
         var rt = refreshTokens.findByTokenSha256(hash)
                 .orElseThrow(() -> new IllegalArgumentException("Invalid refresh token"));
@@ -51,7 +55,7 @@ class AuthService {
         return new AuthResponse(jwtService.issueAccessToken(rt.userId.toString()), rawRefreshToken);
     }
 
-    void logout(String rawRefreshToken) {
+    public void logout(String rawRefreshToken) {
         var hash = sha256(rawRefreshToken);
         refreshTokens.findByTokenSha256(hash).ifPresent(rt -> {
             rt.revoked = true;
