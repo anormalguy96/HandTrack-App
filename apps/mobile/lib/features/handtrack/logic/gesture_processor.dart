@@ -16,13 +16,6 @@ class GestureProcessor {
 
     final landmarks = hand.landmarks;
 
-    // Helper to get distance between two landmarks
-    double dist(int a, int b) {
-      final pA = landmarks[a];
-      final pB = landmarks[b];
-      return math.sqrt(math.pow(pA.x - pB.x, 2) + math.pow(pA.y - pB.y, 2));
-    }
-
     // Helper to check if a finger is "extended"
     // We check if the tip is further from the wrist than the PIP joint
     bool isExtended(int tip, int pip, int mcp) {

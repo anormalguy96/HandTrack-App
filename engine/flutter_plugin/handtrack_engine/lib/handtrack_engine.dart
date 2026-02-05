@@ -28,7 +28,6 @@ class HandtrackView extends StatefulWidget {
 
 class _HandtrackViewState extends State<HandtrackView> {
   static const _viewType = "handtrack_engine/view";
-  int? _viewId;
   StreamSubscription? _sub;
 
   @override
@@ -42,7 +41,9 @@ class _HandtrackViewState extends State<HandtrackView> {
     final events = EventChannel("handtrack_engine/events_$id");
     _sub = events.receiveBroadcastStream().listen((evt) {
       try {
-        final map = (evt is String) ? jsonDecode(evt) as Map<String, dynamic> : (evt as Map).cast<String, dynamic>();
+        final map = (evt is String)
+            ? jsonDecode(evt) as Map<String, dynamic>
+            : (evt as Map).cast<String, dynamic>();
         widget.onFrame(HandFrame.fromJson(map));
       } catch (e) {
         widget.onError?.call("Parse error: $e");
@@ -62,7 +63,6 @@ class _HandtrackViewState extends State<HandtrackView> {
         creationParams: creationParams,
         creationParamsCodec: const StandardMessageCodec(),
         onPlatformViewCreated: (id) {
-          _viewId = id;
           _bindStream(id);
         },
       );
@@ -74,7 +74,6 @@ class _HandtrackViewState extends State<HandtrackView> {
         creationParams: creationParams,
         creationParamsCodec: const StandardMessageCodec(),
         onPlatformViewCreated: (id) {
-          _viewId = id;
           _bindStream(id);
         },
       );
@@ -91,9 +90,11 @@ class HandtrackController {
   final int _viewId;
   MethodChannel get _ch => MethodChannel("handtrack_engine/methods_$_viewId");
 
-  static HandtrackController forViewId(int viewId) => HandtrackController._(viewId);
+  static HandtrackController forViewId(int viewId) =>
+      HandtrackController._(viewId);
 
-  Future<void> setConfig(HandtrackConfig cfg) => _ch.invokeMethod("setConfig", cfg.toJson());
+  Future<void> setConfig(HandtrackConfig cfg) =>
+      _ch.invokeMethod("setConfig", cfg.toJson());
 
   Future<void> pause() => _ch.invokeMethod("pause");
 

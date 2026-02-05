@@ -214,10 +214,10 @@ class _HandtrackScreenState extends State<HandtrackScreen> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.6),
+                    color: Colors.black.withValues(alpha: 0.6),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                        color: const Color(0xFF69F0AE).withOpacity(0.3)),
+                        color: const Color(0xFF69F0AE).withValues(alpha: 0.3)),
                   ),
                   child: Text(
                     _gestureName,
@@ -246,8 +246,8 @@ class _HandtrackScreenState extends State<HandtrackScreen> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.06),
-              border: Border.all(color: Colors.white.withOpacity(0.12)),
+              color: Colors.white.withValues(alpha: 0.06),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Row(
@@ -267,7 +267,7 @@ class _HandtrackScreenState extends State<HandtrackScreen> {
                       Text(
                           "$_status • FPS: ${_lastFrame?.fps.toStringAsFixed(1) ?? "0"}",
                           style: TextStyle(
-                              color: Colors.white.withOpacity(0.5),
+                              color: Colors.white.withValues(alpha: 0.5),
                               fontSize: 11,
                               fontWeight: FontWeight.w500)),
                     ],
@@ -341,8 +341,8 @@ class _HandtrackScreenState extends State<HandtrackScreen> {
                   shape: BoxShape.circle,
                   gradient: LinearGradient(
                     colors: [
-                      Colors.white.withOpacity(0.15),
-                      Colors.white.withOpacity(0.05)
+                      Colors.white.withValues(alpha: 0.15),
+                      Colors.white.withValues(alpha: 0.05)
                     ],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
@@ -367,8 +367,8 @@ class _HandtrackScreenState extends State<HandtrackScreen> {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          border: Border.all(color: color.withOpacity(0.25)),
+          color: color.withValues(alpha: 0.1),
+          border: Border.all(color: color.withValues(alpha: 0.25)),
           borderRadius: BorderRadius.circular(18),
         ),
         child: Icon(icon, color: color, size: 26),
@@ -405,12 +405,12 @@ class _CanvasPainter extends CustomPainter {
             path,
             paint
               ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 10)
-              ..color = s.color.withOpacity(0.6));
+              ..color = s.color.withValues(alpha: 0.6));
         canvas.drawPath(
             path,
             paint
               ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 5)
-              ..color = s.color.withOpacity(0.8));
+              ..color = s.color.withValues(alpha: 0.8));
       }
 
       // Draw core line (always white-ish for the neon center)

@@ -37,12 +37,12 @@ class _SkeletonPainter extends CustomPainter {
       ..style = PaintingStyle.fill;
 
     final linePaint = Paint()
-      ..color = const Color(0xFF69F0AE).withOpacity(0.5)
+      ..color = const Color(0xFF69F0AE).withValues(alpha: 0.5)
       ..strokeWidth = 2.0
       ..style = PaintingStyle.stroke;
 
     final glowPaint = Paint()
-      ..color = const Color(0xFF69F0AE).withOpacity(0.3)
+      ..color = const Color(0xFF69F0AE).withValues(alpha: 0.3)
       ..strokeWidth = 4.0
       ..style = PaintingStyle.stroke
       ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 4);
@@ -75,7 +75,7 @@ class _SkeletonPainter extends CustomPainter {
           points[8],
           8,
           Paint()
-            ..color = const Color(0xFF69F0AE).withOpacity(0.2)
+            ..color = const Color(0xFF69F0AE).withValues(alpha: 0.2)
             ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, 6));
     }
   }
