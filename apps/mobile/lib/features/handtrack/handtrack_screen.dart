@@ -156,6 +156,7 @@ class _HandtrackScreenState extends State<HandtrackScreen> {
         .create();
     await imagePath.writeAsBytes(image);
 
+    // ignore: deprecated_member_use
     await Share.shareXFiles([XFile(imagePath.path)],
         text: 'Check out my Neon Studio creation!');
   }
@@ -348,7 +349,8 @@ class _HandtrackScreenState extends State<HandtrackScreen> {
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
-                  border: Border.all(color: Colors.white.withOpacity(0.2)),
+                  border:
+                      Border.all(color: Colors.white.withValues(alpha: 0.2)),
                   boxShadow: const [
                     BoxShadow(
                         color: Colors.black26, blurRadius: 10, spreadRadius: 1)

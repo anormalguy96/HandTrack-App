@@ -1,27 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
-import { FilesetResolver, GestureRecognizer, DrawingUtils } from "@mediapipe/tasks-vision";
+import {
+  FilesetResolver,
+  GestureRecognizer,
+  FaceLandmarker, // [NEW] Added for AR
+  DrawingUtils,
+  HandLandmarkerResult
+} from "@mediapipe/tasks-vision";
+import "./App.css";
 
-/**
- * Neon Studio — single-file, production-grade demo (optimized)
- *
- * Goals:
- * - Reliable boot (camera + MediaPipe) with strict-mode safe effects
- * - No illegal invocation (requestVideoFrameCallback bound correctly)
- * - No hook misuse (no hooks inside hooks)
- * - Smooth interaction:
- *    • Point (index extended) → draw
- *    • Pinch (thumb+index) → grab + move selected stroke
- *    • While pinching: rotate by twisting pinch line, scale by hand distance (closer/farther)
- *    • Two pinches → translate + scale + rotate (more stable than single-hand)
- * - Shapes (circle/square/triangle/heart/star/arrow) are strokes too → pickable/movable/scalable
- * - Voice: auto-pick non-Microsoft TTS voice, no voice list UI
- *
- * Notes on speed:
- * - The main cost is client-side vision inference (not your backend). MediaPipe runs in-browser (WASM/WebGL).
- * - You *can* replace the model, but a custom model usually won’t beat MediaPipe out-of-the-box unless you invest in
- *   training + mobile-friendly inference (TFLite/CoreML/NNAPI) and strong optimization.
- */
 
 type Pt = { x: number; y: number };
 type StrokePoint = { x: number; y: number; t: number; w: number };
@@ -70,6 +57,17 @@ function padBBox(bb: BBox, pad: number): BBox {
 }
 function bboxContains(bb: BBox, p: Pt) {
   return p.x >= bb.minX && p.x <= bb.maxX && p.y >= bb.minY && p.y <= bb.maxY;
+}
+function computeBBox(pts: { x: number; y: number }[]): BBox {
+  if (!pts.length) return emptyBBox();
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const p of pts) {
+    minX = Math.min(minX, p.x);
+    minY = Math.min(minY, p.y);
+    maxX = Math.max(maxX, p.x);
+    maxY = Math.max(maxY, p.y);
+  }
+  return { minX, minY, maxX, maxY };
 }
 function centroid(pts: Pt[]): Pt {
   if (!pts.length) return { x: 0, y: 0 };
@@ -142,7 +140,7 @@ class OneEuro2D {
   private dx = new LowPass(1);
   private dy = new LowPass(1);
   private lastT = 0;
-  constructor(private minCutoff = 0.9, private beta = 0.02, private dCutoff = 1.0) {}
+  constructor(private minCutoff = 0.9, private beta = 0.02, private dCutoff = 1.0) { }
   set(minCutoff: number, beta: number) {
     this.minCutoff = minCutoff;
     this.beta = beta;
@@ -312,7 +310,47 @@ function parseSpokenNumber(text: string): number | null {
 }
 
 /* ------------------------------- main component ------------------------------ */
+
+  const fontStack =
+    'Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"';
+
+// SVG Icons
+const Icons = {
+  Undo: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>,
+  Redo: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3L21 13"/></svg>,
+  Clear: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>,
+  Export: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>,
+  Share: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>,
+  Glow: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="M4.93 4.93l1.41 1.41"/><path d="M17.66 17.66l1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="M6.34 17.66l-1.41 1.41"/><path d="M19.07 4.93l-1.41 1.41"/></svg>,
+  Landmarks: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/><circle cx="5" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><path d="M5 12h14"/><path d="M12 5v14"/></svg>,
+  MicOn: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>,
+  MicOff: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>,
+  Circle: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/></svg>,
+  Square: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/></svg>,
+  Triangle: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>,
+  Heart: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>,
+  Star: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>,
+  Arrow: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>,
+  WhatsApp: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>,
+  Instagram: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>,
+  Facebook: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>,
+  Twitter: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 3a10.9 10.9 0 0 1-3.14 1.53 4.48 4.48 0 0 0-7.86 3v1A10.66 10.66 0 0 1 3 4s-4 9 5 13a11.64 11.64 0 0 1-7 2c9 5 20 0 20-11.5a4.5 4.5 0 0 0-.08-.83A7.72 7.72 0 0 0 23 3z"/></svg>,
+};
+
+/* ------------------------------- Main Component --------------------------- */
 export default function App() {
+  /* ------------------------------- DOM refs ------------------------------- */
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const drawRef = useRef<HTMLCanvasElement | null>(null);
+  const overlayRef = useRef<HTMLCanvasElement | null>(null);
+  const inferCanvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  /* -------------------------- MediaPipe landmarker ------------------------- */
+  /* -------------------------- MediaPipe landmarker ------------------------- */
+  const [landmarker, setLandmarker] = useState<GestureRecognizer | null>(null);
+  const [faceLandmarker, setFaceLandmarker] = useState<FaceLandmarker | null>(null); // [NEW] Ref for face
+  const [arItems, setArItems] = useState<{ hat: boolean; glasses: boolean }>({ hat: false, glasses: false }); // [NEW] AR State
+
   const theme = useMemo(
     () => ({
       bg: "#0B0D10",
@@ -328,22 +366,11 @@ export default function App() {
     []
   );
 
-  const fontStack =
-    'Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"';
-
-  /* ------------------------------- DOM refs ------------------------------- */
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const drawRef = useRef<HTMLCanvasElement | null>(null);
-  const overlayRef = useRef<HTMLCanvasElement | null>(null);
-  const inferCanvasRef = useRef<HTMLCanvasElement | null>(null);
-
-  /* -------------------------- MediaPipe landmarker ------------------------- */
-  const [landmarker, setLandmarker] = useState<GestureRecognizer | null>(null);
-
   /* --------------------------- core runtime refs --------------------------- */
   const strokesRef = useRef<Stroke[]>([]);
   const redoRef = useRef<Stroke[]>([]);
   const tracksRef = useRef<Track[]>([]);
+  const faceResultsRef = useRef<any>(null); // [NEW] Ref to bridge inference and render loops
   const needsFullRedrawRef = useRef(false);
 
   // admin/guest control
@@ -368,6 +395,7 @@ export default function App() {
     glow: true,
     brushColor: "#69F0AE",
     baseThickness: 6,
+    eraserMode: false, // New eraser mode (Type 2)
 
     inferPreset: "FAST" as InferencePreset,
     inferFpsCap: 24,
@@ -383,6 +411,8 @@ export default function App() {
   const [ready, setReady] = useState(false);
   const [loadingStep, setLoadingStep] = useState("Initializing…");
   const [hud, setHud] = useState({ fps: 0, inferMs: 0, strokes: 0, hands: 0, guestUnlocked: false });
+  const [showInstructions, setShowInstructions] = useState(false);
+  const [initialOverlay, setInitialOverlay] = useState(true);
 
   /* -------------------------------- voice -------------------------------- */
   const [voiceOn, setVoiceOn] = useState(true);
@@ -390,13 +420,37 @@ export default function App() {
   useEffect(() => {
     voiceOnRef.current = voiceOn;
   }, [voiceOn]);
-
   const [voiceHint, setVoiceHint] = useState(
-    'Mic on. Try: "change color to red", "glow off", "thickness 10", "draw small heart", "export".'
+    'Try: "Nova change color to red", "Nova glow off", "Nova export".'
   );
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  
+  // New UI States
+  const [brushColor, setBrushColor] = useState(settingsRef.current.brushColor);
+  const [baseThickness, setBaseThickness] = useState(settingsRef.current.baseThickness);
+  const [glow, setGlow] = useState(settingsRef.current.glow);
+  const [showLandmarks, setShowLandmarks] = useState(settingsRef.current.showLandmarks);
+  const [inferPreset, setInferPreset] = useState<InferencePreset>(settingsRef.current.inferPreset);
+  const [inferFpsCap, setInferFpsCap] = useState(settingsRef.current.inferFpsCap);
+  const [maxHands, setMaxHands] = useState(settingsRef.current.maxHands);
+  const [eraserMode, setEraserMode] = useState(false); // Type 2 eraser UI state
+
+  // Auto-hide initial overlay
+  useEffect(() => {
+    const timer = setTimeout(() => setInitialOverlay(false), 3500);
+    return () => clearTimeout(timer);
+  }, []);
+
+  /* ------------------------------- VAD / Voice ------------------------------ */
+  const vadContextRef = useRef<AudioContext | null>(null);
+  const vadAnalyserRef = useRef<AnalyserNode | null>(null);
+  const vadSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const vadStreamRef = useRef<MediaStream | null>(null);
+  const vadIntervalRef = useRef<number>(0);
 
   const speechRecRef = useRef<any>(null);
   const voiceRef = useRef<SpeechSynthesisVoice | null>(null);
+  // Guard to prevent self-triggering
   const ttsGuardRef = useRef({
     speaking: false,
     lastSpoken: "",
@@ -406,6 +460,74 @@ export default function App() {
   });
 
   const handleVoiceCommandRef = useRef<((t: string) => void) | null>(null);
+
+  // Initialize VAD
+  useEffect(() => {
+    // Only run VAD if voice is locally enabled
+    if (!voiceOn) return;
+
+    (async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        vadStreamRef.current = stream;
+        
+        const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+        vadContextRef.current = ctx;
+
+        const source = ctx.createMediaStreamSource(stream);
+        vadSourceRef.current = source;
+
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 256;
+        source.connect(analyser);
+        vadAnalyserRef.current = analyser;
+
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+        // VAD Loop
+        window.clearInterval(vadIntervalRef.current);
+        vadIntervalRef.current = window.setInterval(() => {
+          // If already speaking, or TTS is active, or Rec is active, don't trigger
+          if (ttsGuardRef.current.speaking || ttsGuardRef.current.ignoreUntil > performance.now()) return;
+          
+          // Check if recognition is already active (approximate check via internal state or if we know we started it)
+          // We'll trust the browser to throw error or handle partial overlap, but best to avoid calling start() if active.
+          // Since we can't easily peek into SpeechRecognition state property, we rely on the `onend` callback to re-arm.
+          
+          analyser.getByteFrequencyData(dataArray);
+          // Calculate average volume
+          let sum = 0;
+          for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+          const avg = sum / dataArray.length;
+
+          // Threshold (adjustable). 20-30 is usually good for background noise vs speech.
+          if (avg > 25) {
+             const rec = speechRecRef.current;
+             if (rec) {
+                try {
+                   rec.start(); 
+                   // Pause VAD for a bit to let Rec take over? 
+                   // Actually, Rec will fire 'onstart' which we can track. 
+                   // But `start()` determines if it's active. 
+                   // If we call start() while active, it throws.
+                } catch (e: any) {
+                   // Ignore "already started" errors
+                }
+             }
+          }
+        }, 100);
+
+      } catch (e) {
+        console.warn("[VAD] Failed to init mic for VAD:", e);
+      }
+    })();
+
+    return () => {
+       window.clearInterval(vadIntervalRef.current);
+       vadStreamRef.current?.getTracks().forEach(t => t.stop());
+       vadContextRef.current?.close();
+    };
+  }, [voiceOn]);
 
   // Inject a nicer font (Inter) if the project doesn't already provide it.
   useEffect(() => {
@@ -452,10 +574,13 @@ export default function App() {
     const normalized = msg.toLowerCase().trim();
     guard.lastSpoken = normalized;
     guard.speaking = true;
-    guard.ignoreUntil = performance.now() + 10000; // Safe high value, onend will reset it
+    guard.ignoreUntil = performance.now() + 10000;
     window.speechSynthesis.cancel();
+    setIsSpeaking(true);
 
-    const u = new SpeechSynthesisUtterance(msg);
+    // [FIX] Prepend silence/period to prevent first-syllable cutoff
+    const safeMsg = ". " + msg;
+    const u = new SpeechSynthesisUtterance(safeMsg);
     u.rate = 1.0;
     u.pitch = 1.0;
     if (voiceRef.current) u.voice = voiceRef.current;
@@ -463,10 +588,15 @@ export default function App() {
     u.onend = () => {
       guard.speaking = false;
       guard.suppressAutoRestart = false;
-      // Wait a bit before allowing recognition to resume listening to surroundings
+      setIsSpeaking(false);
       setTimeout(() => {
         guard.ignoreUntil = performance.now() + 100;
       }, 500);
+    };
+
+    u.onerror = () => {
+      guard.speaking = false;
+      setIsSpeaking(false);
     };
 
     window.speechSynthesis.speak(u);
@@ -518,18 +648,19 @@ export default function App() {
     []
   );
 
-  const redrawAll = useCallback(() => {
+  const fullRedraw = useCallback(() => {
     const canvas = drawRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d")!;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    const { glow } = settingsRef.current;
-
-    for (const s of strokesRef.current) {
-      if (s.points.length < 2) continue;
-      for (let i = 1; i < s.points.length; i++) {
-        paintStrokeSegment(ctx, s.color, s.points[i - 1], s.points[i], glow);
+    const glowOn = settingsRef.current.glow;
+    for (const stroke of strokesRef.current) {
+      if (stroke.points.length < 2) continue;
+      for (let i = 1; i < stroke.points.length; i++) {
+        const a = stroke.points[i - 1];
+        const b = stroke.points[i];
+        paintStrokeSegment(ctx, stroke.color, a, b, glowOn);
       }
     }
   }, [paintStrokeSegment]);
@@ -568,32 +699,89 @@ export default function App() {
     [paintStrokeSegment]
   );
 
-  const clearAll = useCallback(() => {
-    strokesRef.current = [];
-    redoRef.current = [];
-    needsFullRedrawRef.current = true;
-    speak("Cleared.");
-  }, [speak]);
-
+  /* -------------------------- history & clipboard ------------------------- */
   const undo = useCallback(() => {
-    const st = strokesRef.current;
-    if (!st.length) return;
-    const last = st[st.length - 1];
-    redoRef.current = [last, ...redoRef.current];
-    strokesRef.current = st.slice(0, -1);
-    needsFullRedrawRef.current = true;
-    speak("Undo.");
+    const s = strokesRef.current;
+    if (!s.length) return;
+    const last = s.pop();
+    if (last) {
+      redoRef.current.push(last);
+      needsFullRedrawRef.current = true;
+      speak("Undo.");
+    }
   }, [speak]);
 
   const redo = useCallback(() => {
     const r = redoRef.current;
     if (!r.length) return;
-    const [first, ...rest] = r;
-    redoRef.current = rest;
-    strokesRef.current = [...strokesRef.current, first];
-    needsFullRedrawRef.current = true;
-    speak("Redo.");
+    const back = r.pop();
+    if (back) {
+      strokesRef.current.push(back);
+      needsFullRedrawRef.current = true;
+      speak("Redo.");
+    }
   }, [speak]);
+
+  const clearAll = useCallback(() => {
+    if (strokesRef.current.length === 0) return;
+    strokesRef.current = [];
+    redoRef.current = [];
+    needsFullRedrawRef.current = true;
+    speak("Canvas cleared.");
+  }, [speak]);
+
+  /* ------------------------------- Eraser Logic ------------------------------- */
+  const eraseStrokeAt = useCallback((pt: Pt) => {
+    const radius = 30; // Eraser radius
+    const nextStrokes: Stroke[] = [];
+    let changed = false;
+
+    for (const s of strokesRef.current) {
+      // Quick bbox check
+      if (
+        pt.x < s.bbox.minX - radius ||
+        pt.x > s.bbox.maxX + radius ||
+        pt.y < s.bbox.minY - radius ||
+        pt.y > s.bbox.maxY + radius
+      ) {
+        nextStrokes.push(s);
+        continue;
+      }
+
+      let currentSegment: StrokePoint[] = [];
+      const segments: StrokePoint[][] = [];
+      let strokeHit = false;
+
+      for (const p of s.points) {
+        if (dist(p, pt) > radius) {
+          currentSegment.push(p);
+        } else {
+          strokeHit = true;
+          if (currentSegment.length > 0) {
+            segments.push(currentSegment);
+            currentSegment = [];
+          }
+        }
+      }
+      if (currentSegment.length > 0) segments.push(currentSegment);
+
+      if (strokeHit) {
+        changed = true;
+        for (const seg of segments) {
+          if (seg.length > 1) { 
+             nextStrokes.push({ ...s, id: uid(), points: seg, bbox: computeBBox(seg) });
+          }
+        }
+      } else {
+        nextStrokes.push(s);
+      }
+    }
+
+    if (changed) {
+      strokesRef.current = nextStrokes;
+      needsFullRedrawRef.current = true;
+    }
+  }, []);
 
   const pickStroke = useCallback((p: Pt): string | "" => {
     const pad = settingsRef.current.pickRadiusPx;
@@ -677,61 +865,60 @@ export default function App() {
       const t0 = performance.now();
       const thick = settingsRef.current.baseThickness;
 
-      const id = startStroke(color, c, t0, thick);
+      const pts: { x: number; y: number }[] = [];
+      const add = (x: number, y: number) => pts.push({ x, y });
 
-      const pts: Pt[] = [];
       if (shape === "circle") {
-        const N = 72;
-        for (let i = 0; i <= N; i++) {
-          const a = (i / N) * Math.PI * 2;
-          pts.push({ x: c.x + Math.cos(a) * r, y: c.y + Math.sin(a) * r });
+        for (let i = 0; i <= 72; i++) {
+          const a = (i / 72) * Math.PI * 2;
+          add(c.x + Math.cos(a) * r, c.y + Math.sin(a) * r);
         }
       } else if (shape === "square") {
-        pts.push({ x: c.x - r, y: c.y - r });
-        pts.push({ x: c.x + r, y: c.y - r });
-        pts.push({ x: c.x + r, y: c.y + r });
-        pts.push({ x: c.x - r, y: c.y + r });
-        pts.push({ x: c.x - r, y: c.y - r });
+        add(c.x - r, c.y - r); add(c.x + r, c.y - r);
+        add(c.x + r, c.y + r); add(c.x - r, c.y + r);
+        add(c.x - r, c.y - r);
       } else if (shape === "triangle") {
-        pts.push({ x: c.x, y: c.y - r });
-        pts.push({ x: c.x + r, y: c.y + r });
-        pts.push({ x: c.x - r, y: c.y + r });
-        pts.push({ x: c.x, y: c.y - r });
+        add(c.x, c.y - r); add(c.x + r, c.y + r);
+        add(c.x - r, c.y + r); add(c.x, c.y - r);
       } else if (shape === "heart") {
-        const N = 96;
-        for (let i = 0; i <= N; i++) {
-          const tt = (i / N) * Math.PI * 2;
-          const x = 16 * Math.pow(Math.sin(tt), 3);
-          const y = 13 * Math.cos(tt) - 5 * Math.cos(2 * tt) - 2 * Math.cos(3 * tt) - Math.cos(4 * tt);
-          pts.push({ x: c.x + (x / 18) * r, y: c.y - (y / 18) * r });
+        for (let i = 0; i <= 72; i++) {
+          const t = (i / 72) * Math.PI * 2;
+          const x = 16 * Math.pow(Math.sin(t), 3);
+          const y = -(13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t));
+          // Normalize scale a bit
+          add(c.x + (x / 16) * r, c.y + (y / 16) * r);
         }
       } else if (shape === "star") {
         const spikes = 5;
         const outer = r;
-        const inner = r * 0.45;
+        const inner = r * 0.5;
         for (let i = 0; i <= spikes * 2; i++) {
           const rr = i % 2 === 0 ? outer : inner;
           const a = (i / (spikes * 2)) * Math.PI * 2 - Math.PI / 2;
-          pts.push({ x: c.x + Math.cos(a) * rr, y: c.y + Math.sin(a) * rr });
+          add(c.x + Math.cos(a) * rr, c.y + Math.sin(a) * rr);
         }
-        pts.push(pts[0]);
       } else if (shape === "arrow") {
-        const w = r * 0.95;
-        const h = r * 0.55;
-        pts.push({ x: c.x - w, y: c.y });
-        pts.push({ x: c.x + w * 0.35, y: c.y });
-        pts.push({ x: c.x + w * 0.35, y: c.y - h });
-        pts.push({ x: c.x + w, y: c.y });
-        pts.push({ x: c.x + w * 0.35, y: c.y + h });
-        pts.push({ x: c.x + w * 0.35, y: c.y });
-        pts.push({ x: c.x - w, y: c.y });
+        const w = r;
+        const h = r * 0.6;
+        add(c.x - w, c.y); add(c.x + w * 0.5, c.y);
+        add(c.x + w * 0.5, c.y - h*0.5); add(c.x + w, c.y);
+        add(c.x + w * 0.5, c.y + h*0.5); add(c.x + w * 0.5, c.y);
+        add(c.x - w, c.y);
       }
 
-      for (let i = 0; i < pts.length; i++) addStrokePoint(id, pts[i], t0 + i, thick);
-
-      speak(`${size} ${shape} drawn`);
+      if (pts.length) {
+        const s: Stroke = {
+          id: uid(),
+          points: pts.map(p => ({ x:p.x, y:p.y, t:t0, w:thick })),
+          color,
+          bbox: computeBBox(pts.map(p => ({ x:p.x, y:p.y, t:t0, w:thick }))),
+        };
+        strokesRef.current.push(s);
+        needsFullRedrawRef.current = true;
+        speak(`${size} ${shape} drawn`);
+      }
     },
-    [addStrokePoint, speak, startStroke]
+    [speak]
   );
 
   /* ------------------------------ export helpers ------------------------------ */
@@ -778,7 +965,7 @@ export default function App() {
     speak("Exported.");
   }, [exportBlobMirrored, speak]);
 
-  const sharePng = useCallback(async (target?: "whatsapp" | "instagram" | "facebook" | "x") => {
+  const sharePng = useCallback(async (target?: "whatsapp" | "instagram" | "tiktok" | "facebook" | "x") => {
     const blob = await exportBlobMirrored();
     if (!blob) return;
 
@@ -788,9 +975,10 @@ export default function App() {
         let url = "";
         if (target === "whatsapp") url = "https://wa.me/";
         else if (target === "instagram") url = "https://www.instagram.com/";
+        else if (target === "tiktok") url = "https://www.tiktok.com/";
         else if (target === "facebook") url = "https://www.facebook.com/";
         else if (target === "x") url = "https://twitter.com/intent/tweet";
-        
+
         if (url) window.open(url, "_blank");
       }, 500);
       return;
@@ -821,84 +1009,124 @@ export default function App() {
     return settingsRef.current.brushColor;
   }, []);
 
+
+  /* -------------------------------- voice -------------------------------- */
+  const textMatches = (text: string, phrases: string[]) => phrases.some(p => text.includes(p));
+
   const handleVoiceCommand = useCallback(
     (text: string) => {
       const t = text.toLowerCase();
-
-      if ((t.includes("unlock") && (t.includes("guest") || t.includes("others"))) || t.includes("everyone can draw")) {
-        guestUnlockUntilRef.current = Date.now() + 30_000;
-        speak("Guests unlocked for thirty seconds. Guests draw in black.");
-        return;
-      }
-      if ((t.includes("lock") && (t.includes("guest") || t.includes("others"))) || t.includes("lock guests")) {
-        guestUnlockUntilRef.current = 0;
-        speak("Guests locked.");
+      
+      if (!t.includes("nova")) {
+        console.log("[Voice] Ignored - no 'Nova' keyword:", t);
         return;
       }
 
-      if (t.includes("glow on")) {
-        settingsRef.current.glow = true;
-        needsFullRedrawRef.current = true;
-        speak("Glow on.");
-        return;
-      }
-      if (t.includes("glow off")) {
-        settingsRef.current.glow = false;
-        needsFullRedrawRef.current = true;
-        speak("Glow off.");
-        return;
+      // STRICT EXPORT COMMANDS
+      if (t.includes("export") || t.includes("share") || t.includes("send")) {
+        if (textMatches(t, ["whatsapp"])) return void sharePng("whatsapp");
+        if (textMatches(t, ["instagram", "insta"])) return void sharePng("instagram");
+        if (textMatches(t, ["tiktok", "tic toc"])) return void sharePng("tiktok");
+        if (textMatches(t, ["facebook", "fb"])) return void sharePng("facebook");
+        if (textMatches(t, ["twitter", "x.com"])) return void sharePng("x");
+        
+        if (t.includes("png") || t.includes("file") || t.includes("download")) return void downloadPng();
+        return void sharePng(); // Default share
       }
 
-      if (t.includes("thickness") || t.includes("brush size")) {
-        const num = parseSpokenNumber(t);
-        if (num != null) {
-          const v = clamp(num, 1, 40);
-          settingsRef.current.baseThickness = v;
-          speak(`Thickness ${v.toFixed(0)}`);
-        } else {
-          speak("I couldn't understand the thickness value.");
+      // ERASER MODES
+      // Type 1: Remove specific item or selection
+      if (t.includes("remove") || t.includes("delete") || t.includes("erase") || t.includes("clear")) {
+        if (t.includes("all") || t.includes("canvas") || t.includes("everything")) {
+            clearAll();
+            return;
         }
+        
+        // AR Items
+        if (t.includes("hat")) {
+           setArItems(p => ({ ...p, hat: false }));
+           speak("Hat removed.");
+           return;
+        }
+        if (t.includes("glasses")) {
+           setArItems(p => ({ ...p, glasses: false }));
+           speak("Glasses removed.");
+           return;
+        }
+      }
+
+      // AR Add Commands
+      if (t.includes("add") || t.includes("wear") || t.includes("put on")) {
+         if (t.includes("hat")) {
+             setArItems(p => ({ ...p, hat: true }));
+             speak("Hat added.");
+             return;
+         }
+         if (t.includes("glasses") || t.includes("shades")) {
+             setArItems(p => ({ ...p, glasses: true }));
+             speak("Glasses added.");
+             return;
+         }
+      }
+
+      // Type 2: Eraser Mode (Partial)
+      if (t.includes("eraser mode") || t.includes("eraser tool")) {
+        settingsRef.current.eraserMode = true;
+        setEraserMode(true);
+        speak("Eraser mode enabled. Use your index finger to erase.");
+        return;
+      }
+      if (t.includes("draw mode") || t.includes("brush") || t.includes("pen")) {
+        settingsRef.current.eraserMode = false;
+        setEraserMode(false);
+        speak("Draw mode enabled.");
         return;
       }
 
-      const colorMatch = t.match(/(change|set)\s+(the\s+)?color(\s+to)?\s+(.+)$/i);
-      if (colorMatch?.[4]) {
-        const c = parseCssColorCandidate(colorMatch[4]);
-        settingsRef.current.brushColor = c;
-        speak("Color changed.");
-        return;
-      }
-
-      if (t.includes("draw")) {
-        const size = t.includes("small") ? "small" : t.includes("big") || t.includes("large") ? "big" : "medium";
-
-        const shape =
-          t.includes("circle") ? "circle" :
-          t.includes("square") ? "square" :
-          t.includes("triangle") ? "triangle" :
-          t.includes("heart") ? "heart" :
-          t.includes("star") ? "star" :
-          t.includes("arrow") ? "arrow" :
-          null;
+      // Shapes
+      if (t.includes("draw") || t.includes("create") || t.includes("make")) {
+        let shape = "";
+        if (t.includes("circle")) shape = "circle";
+        else if (t.includes("square") || t.includes("box")) shape = "square";
+        else if (t.includes("triangle")) shape = "triangle";
+        else if (t.includes("heart")) shape = "heart";
+        else if (t.includes("star")) shape = "star";
+        else if (t.includes("arrow")) shape = "arrow";
 
         if (shape) {
-          let color = settingsRef.current.brushColor;
-          if (t.includes("black")) color = "#000000";
-          if (t.includes("white")) color = "#ffffff";
-          drawShapeAtCenter(shape, size, color);
+          const size = t.includes("big") || t.includes("large") ? "big" : t.includes("small") || t.includes("tiny") ? "small" : "medium";
+          drawShapeAtCenter(shape as any, size, settingsRef.current.brushColor);
           return;
         }
       }
 
-      if (t.includes("export") || t.includes("save") || t.includes("download")) return void downloadPng();
-      if (t.includes("share")) return void sharePng();
-      if (t.includes("copy")) return void copyToClipboard();
+      // Toggles
+      if (t.includes("glow")) {
+        if (t.includes("on") || t.includes("enable")) { setGlow(true); speak("Glow on."); }
+        else if (t.includes("off") || t.includes("disable")) { setGlow(false); speak("Glow off."); }
+        return;
+      }
+      if (t.includes("skeleton") || t.includes("landmarks")) {
+         if (t.includes("show") || t.includes("on")) { setShowLandmarks(true); speak("Skeleton visible."); }
+         else { setShowLandmarks(false); speak("Skeleton hidden."); }
+         return;
+      }
+
       if (t.includes("undo")) return undo();
       if (t.includes("redo")) return redo();
-      if (t.includes("clear")) return clearAll();
+      if (t.includes("copy")) return void copyToClipboard();
 
-      speak("No recognized command.");
-      setVoiceHint('Try: "change color to red", "glow off", "thickness 12", "draw small star", "unlock guests", "export".');
+      // Brush properties
+      if (t.includes("color") || t.includes("set brush")) {
+         const c = parseCssColorCandidate(t.split(" ").pop() || "");
+         if (c && c !== t.split(" ").pop()) {
+            setBrushColor(c);
+            speak("Color set.");
+            return;
+         }
+      }
+
+      speak("Command not recognized.");
     },
     [clearAll, drawShapeAtCenter, downloadPng, redo, speak, undo, copyToClipboard, sharePng]
   );
@@ -906,7 +1134,7 @@ export default function App() {
   const resetVoice = useCallback(() => {
     try {
       speechRecRef.current?.abort();
-    } catch {}
+    } catch { }
     speechRecRef.current = null;
     setVoiceOn(false);
     setTimeout(() => setVoiceOn(true), 100);
@@ -967,9 +1195,7 @@ export default function App() {
 
     rec.onend = () => {
       console.log("[Voice] Ended.");
-      if (voiceOnRef.current) {
-        try { rec.start(); } catch {}
-      }
+      // [FIX] Removed auto-restart. VAD will restart it when sound is detected.
     };
 
     rec.onerror = (e: any) => {
@@ -992,13 +1218,19 @@ export default function App() {
       v.srcObject = null;
 
       console.log("[startCamera] Requesting getUserMedia...");
+      
+      // [FIX] Portrait Mode Detection
+      const isPortrait = window.innerHeight > window.innerWidth;
+      const idealW = isPortrait ? 720 : 1280;
+      const idealH = isPortrait ? 1280 : 720;
+      
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: "user",
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
+          width: { ideal: idealW },
+          height: { ideal: idealH },
         },
-        audio: false,
+        audio: false, // Audio handled by VAD only
       });
 
       v.muted = true;
@@ -1269,23 +1501,33 @@ export default function App() {
 
         if (!tr.isPointing && x.POINT_ACTIVE && !tr.isPinching) {
           tr.isPointing = true;
-          const isAdmin = isAdminGroup(tr);
-          const color = effectiveColorForHand(isAdmin);
-          maybeUnlockGuestsByAdminBlackStrokeStart(tr, color);
+          
+          if (settingsRef.current.eraserMode) {
+             // Eraser mode just activates, doesn't start a stroke
+             eraseStrokeAt(x.pointPt);
+          } else {
+            const isAdmin = isAdminGroup(tr);
+            const color = effectiveColorForHand(isAdmin);
+            maybeUnlockGuestsByAdminBlackStrokeStart(tr, color);
 
-          const adminS = adminScaleRef.current || det.scalePx;
-          const handScale = clamp(det.scalePx / Math.max(1, adminS), 0.8, 1.35);
-          const thickness = clamp(settingsRef.current.baseThickness * handScale, 1, 40);
+            const adminS = adminScaleRef.current || det.scalePx;
+            const handScale = clamp(det.scalePx / Math.max(1, adminS), 0.8, 1.35);
+            const thickness = clamp(settingsRef.current.baseThickness * handScale, 1, 40);
 
-          tr.drawStrokeId = startStroke(color, x.pointPt, nowMs, thickness);
+            tr.drawStrokeId = startStroke(color, x.pointPt, nowMs, thickness);
+          }
         } else if (tr.isPointing && (!x.POINT_ACTIVE || tr.isPinching)) {
           tr.isPointing = false;
           tr.drawStrokeId = "";
-        } else if (tr.isPointing && tr.drawStrokeId) {
-          const adminS = adminScaleRef.current || det.scalePx;
-          const handScale = clamp(det.scalePx / Math.max(1, adminS), 0.8, 1.35);
-          const thickness = clamp(settingsRef.current.baseThickness * handScale + det.pinchStrength * 2.2, 1, 40);
-          addStrokePoint(tr.drawStrokeId, x.pointPt, nowMs, thickness);
+        } else if (tr.isPointing) {
+          if (settingsRef.current.eraserMode) {
+            eraseStrokeAt(x.pointPt);
+          } else if (tr.drawStrokeId) {
+            const adminS = adminScaleRef.current || det.scalePx;
+            const handScale = clamp(det.scalePx / Math.max(1, adminS), 0.8, 1.35);
+            const thickness = clamp(settingsRef.current.baseThickness * handScale + det.pinchStrength * 2.2, 1, 40);
+            addStrokePoint(tr.drawStrokeId, x.pointPt, nowMs, thickness);
+          }
         }
       }
     },
@@ -1304,13 +1546,97 @@ export default function App() {
   );
 
   /* ------------------------------ overlay render ------------------------------ */
-  const renderOverlay = useCallback(() => {
+  const renderOverlay = useCallback((faceRes?: any) => {
     const ov = overlayRef.current;
     const canvas = drawRef.current;
     if (!ov || !canvas) return;
 
     const ctx = ov.getContext("2d")!;
     ctx.clearRect(0, 0, ov.width, ov.height);
+    
+    // AR Rendering
+    if (faceRes && faceRes.faceLandmarks && faceRes.faceLandmarks.length > 0) {
+       const face = faceRes.faceLandmarks[0];
+       const W = ov.width;
+       const H = ov.height;
+       
+       // Helper to get coords
+       const get = (idx: number) => ({ x: face[idx].x * W, y: face[idx].y * H });
+
+       // GLasses
+       if (arItems.glasses) {
+          const eyeL = get(33); // Left eye corner
+          const eyeR = get(263); // Right eye corner
+          const center = { x: (eyeL.x + eyeR.x) / 2, y: (eyeL.y + eyeR.y) / 2 };
+          const size = dist(eyeL, eyeR) * 2.2;
+          
+          ctx.save();
+          ctx.translate(center.x, center.y);
+          // Simple rotation based on eyes
+          const angle = Math.atan2(eyeR.y - eyeL.y, eyeR.x - eyeL.x);
+          ctx.rotate(angle);
+          
+          // Draw Glasses (Neon Style)
+          ctx.beginPath();
+          ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+          ctx.strokeStyle = theme.accent;
+          ctx.lineWidth = 4;
+          
+          // Lenses
+          ctx.rect(-size/2, -size/5, size/2.2, size/2.5);
+          ctx.rect(size/22, -size/5, size/2.2, size/2.5);
+          ctx.fill();
+          ctx.stroke();
+          
+          // Bridge
+          ctx.beginPath();
+          ctx.moveTo(-size/25, -size/5);
+          ctx.lineTo(size/25, -size/5);
+          ctx.stroke();
+          
+          ctx.restore();
+       }
+
+       // Hat
+       if (arItems.hat) {
+          const forehead = get(10); // Top of head
+          const chin = get(152);
+          const headHeight = dist(forehead, chin);
+          const center = { x: forehead.x, y: forehead.y - headHeight * 0.3 };
+          const size = headHeight * 1.5;
+
+          ctx.save();
+          ctx.translate(center.x, center.y);
+          // Angle from chin to forehead
+          const angle = Math.atan2(forehead.y - chin.y, forehead.x - chin.x) + Math.PI / 2;
+          ctx.rotate(angle);
+
+          // Draw Cyber Hat
+          ctx.fillStyle = theme.accent;
+          ctx.strokeStyle = "#fff";
+          ctx.lineWidth = 3;
+          
+          ctx.beginPath();
+          ctx.moveTo(-size/2, 0); // Brim L
+          ctx.lineTo(size/2, 0); // Brim R
+          ctx.lineTo(size/3, -size/2); // Top R
+          ctx.lineTo(-size/3, -size/2); // Top L
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+          
+          // Neon Glow line
+          ctx.beginPath();
+          ctx.strokeStyle = "#0ff";
+          ctx.moveTo(-size/3, -size/4);
+          ctx.lineTo(size/3, -size/4);
+          ctx.stroke();
+
+          ctx.restore();
+       }
+    }
+
+    // Reuse drawUtils if possible (optimization)
     const drawUtils = new DrawingUtils(ctx);
 
     const tracks = tracksRef.current;
@@ -1321,13 +1647,13 @@ export default function App() {
         if (!tr.det.rawLandmarks?.length) continue;
         const admin = isAdminGroup(tr);
         // Map landmarks back to 0.0-1.0 for DrawingUtils
-        const normalizedLandmarks = tr.det.rawLandmarks.map(p => ({ 
-          x: p.x / canvas.width, 
+        const normalizedLandmarks = tr.det.rawLandmarks.map(p => ({
+          x: p.x / canvas.width,
           y: p.y / canvas.height,
           z: 0,
           visibility: 1
         })) as any;
-        
+
         drawUtils.drawConnectors(normalizedLandmarks, GestureRecognizer.HAND_CONNECTIONS, {
           color: admin ? "#69f0ae" : "#ffffff",
           lineWidth: 2
@@ -1354,14 +1680,14 @@ export default function App() {
       ctx.save();
       ctx.scale(-1, 1);
       ctx.translate(-ov.width, 0);
-      
+
       const label = admin ? "ADMIN" : allowed ? "GUEST" : "BLOCKED";
       const gesture = tr.det.gesture && tr.det.gesture !== "None" ? ` [${tr.det.gesture}]` : "";
       const conf = tr.det.gestureConfidence ? ` ${(tr.det.gestureConfidence * 100).toFixed(0)}%` : "";
-      
+
       ctx.font = `bold 14px ${fontStack}`;
       ctx.fillStyle = admin ? "rgba(105,240,174,1.0)" : allowed ? "rgba(255,204,102,1.0)" : "rgba(255,85,102,1.0)";
-      
+
       const tx = ov.width - tr.det.indexTip.x + 16;
       const ty = tr.det.indexTip.y - 12;
       ctx.fillText(label + gesture + conf, tx, ty);
@@ -1392,7 +1718,7 @@ export default function App() {
     const g = guestsUnlocked() ? "ON" : "OFF";
     ctx.fillText(`Hands ${tracks.length} • Guest ${g} • Voice ${voiceRef.current?.name ?? "default"}`, ov.width - 690, ov.height - 26);
     ctx.restore();
-  }, [fontStack, guestsUnlocked, isAdminGroup, isAllowedToControl]);
+  }, [fontStack, guestsUnlocked, isAdminGroup, isAllowedToControl, arItems, theme]);
 
   useEffect(() => {
     let mounted = true;
@@ -1425,33 +1751,49 @@ export default function App() {
         );
 
         const modelPath = "https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/1/gesture_recognizer.task";
+        const faceModelPath = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
 
         const tryCreate = async (delegate: "GPU" | "CPU") => {
           setLoadingStep(`3/4 Init ${delegate}…`);
-          return await loadWithTimeout(GestureRecognizer.createFromOptions(vision, {
+          
+          const gesturePromise = loadWithTimeout(GestureRecognizer.createFromOptions(vision, {
             baseOptions: { modelAssetPath: modelPath, delegate },
             runningMode: "VIDEO",
-            numHands: 2, // explicit for robustness
+            numHands: 2,
             minHandDetectionConfidence: 0.5,
             minHandPresenceConfidence: 0.5,
             minTrackingConfidence: 0.5,
-          }), 15000, `Model-${delegate}`);
+          }), 15000, `Gesture-${delegate}`);
+
+          const facePromise = loadWithTimeout(FaceLandmarker.createFromOptions(vision, {
+            baseOptions: { modelAssetPath: faceModelPath, delegate },
+            runningMode: "VIDEO",
+            numFaces: 1,
+            minFaceDetectionConfidence: 0.5,
+            minFacePresenceConfidence: 0.5,
+            minTrackingConfidence: 0.5,
+            outputFaceBlendshapes: true,
+          }), 15000, `Face-${delegate}`);
+
+          return Promise.all([gesturePromise, facePromise]);
         };
 
-        let gr: GestureRecognizer;
+        let results;
         try {
-          gr = await tryCreate("GPU");
+          results = await tryCreate("GPU");
         } catch (e) {
           console.warn("GPU init failed, falling back to CPU...", e);
-          gr = await tryCreate("CPU");
+          results = await tryCreate("CPU");
         }
 
         if (!mounted) {
-          gr.close();
+          results[0].close();
+          results[1].close();
           return;
         }
 
-        setLandmarker(gr);
+        setLandmarker(results[0]);
+        setFaceLandmarker(results[1]);
         setReady(true);
         setLoadingStep("Ready");
         setVoiceHint("Running. Point → draw. Fist → grab. Palm → select.");
@@ -1515,6 +1857,15 @@ export default function App() {
 
         const t0 = performance.now();
         const res = lm.recognizeForVideo(v, performance.now());
+        
+        // Face Detection (if enabled by AR items being active, or always)
+        // Optimization: Only run if AR items are active or we want face features
+        let faceRes = null;
+        if (faceLandmarker) {
+             faceRes = faceLandmarker.detectForVideo(v, performance.now());
+             faceResultsRef.current = faceRes; // [NEW] Update ref
+        }
+
         const t1 = performance.now();
 
         const inferMs = t1 - t0;
@@ -1591,16 +1942,16 @@ export default function App() {
             } as Omit<HandDet, "rawPoint" | "rawPalm" | "rawLandmarks" | "gesture" | "gestureConfidence">;
 
             const g = computeGestureBooleans(base);
-            
+
             // Override manual booleans with robust MediaPipe gestures
             const isPointing = gestureName === "Pointing_Up";
             const isPalm = gestureName === "Open_Palm";
             const isGrab = gestureName === "Closed_Fist" || gestureName === "Thumb_Up";
 
-            dets.push({ 
-              ...base, 
-              rawPoint: isPointing || g.rawPoint, 
-              rawPalm: isPalm || g.rawPalm, 
+            dets.push({
+              ...base,
+              rawPoint: isPointing || g.rawPoint,
+              rawPalm: isPalm || g.rawPalm,
               rawGrab: isGrab,
               rawLandmarks,
               gesture: gestureName,
@@ -1652,9 +2003,9 @@ export default function App() {
 
       if (needsFullRedrawRef.current) {
         needsFullRedrawRef.current = false;
-        redrawAll();
+        fullRedraw();
       }
-      renderOverlay();
+      renderOverlay(faceResultsRef.current);
 
       if (now - lastHudTs > 250) {
         lastHudTs = now;
@@ -1668,12 +2019,12 @@ export default function App() {
     return () => {
       alive = false;
     };
-  }, [redrawAll, renderOverlay]);
+  }, [fullRedraw, renderOverlay]);
 
   /* ------------------------------ voice toggle ------------------------------ */
   useEffect(() => {
     if (!voiceOn) {
-      try { speechRecRef.current?.stop(); } catch {}
+      try { speechRecRef.current?.stop(); } catch { }
       setVoiceHint("Mic off.");
       return;
     }
@@ -1692,13 +2043,6 @@ export default function App() {
   }, [setupSpeechRecognition, voiceOn]);
 
   /* ------------------------------ UI state -> settingsRef ------------------------------ */
-  const [showLandmarks, setShowLandmarks] = useState(true);
-  const [glow, setGlow] = useState(true);
-  const [brushColor, setBrushColor] = useState("#69F0AE");
-  const [baseThickness, setBaseThickness] = useState(6);
-  const [inferPreset, setInferPreset] = useState<InferencePreset>("FAST");
-  const [inferFpsCap, setInferFpsCap] = useState(24);
-  const [maxHands, setMaxHands] = useState(4);
 
   useEffect(() => {
     settingsRef.current.showLandmarks = showLandmarks;
@@ -1727,7 +2071,7 @@ export default function App() {
   }, [inferFpsCap]);
   useEffect(() => {
     settingsRef.current.maxHands = maxHands;
-    landmarker?.setOptions?.({ numHands: maxHands }).catch?.(() => {});
+    landmarker?.setOptions?.({ numHands: maxHands }).catch?.(() => { });
   }, [maxHands]);
 
   /* ------------------------------ UI styles ------------------------------ */
@@ -1765,240 +2109,200 @@ export default function App() {
   };
 
   return (
-    <div style={{ background: theme.bg, minHeight: "100vh", color: theme.fg, padding: 16, fontFamily: fontStack }}>
-      <div style={{ maxWidth: 1200, margin: "0 auto", display: "grid", gridTemplateColumns: "320px 1fr", gap: 14 }}>
-        {/* Left Panel */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <div style={ui.card}>
-            <div style={{ fontSize: 18, fontWeight: 900 }}>Neon Studio</div>
-            <div style={{ fontSize: 12, color: theme.muted, marginTop: 6 }}>
-              Point → draw • Pinch → grab/move • While pinching: twist to rotate, move closer/farther to scale • Two pinches → move + scale + rotate
-            </div>
-            <div style={{ fontSize: 12, color: theme.muted, marginTop: 6 }}>
-              Admin locks control; guests unlock only when admin draws with <b>black</b> (guests forced black).
-            </div>
-          </div>
-
-          <div style={ui.card}>
-            <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 10 }}>Tools</div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button style={ui.btn()} onClick={undo}>Undo</button>
-              <button style={ui.btn()} onClick={redo}>Redo</button>
-              <button style={ui.btn()} onClick={clearAll}>Clear</button>
-              <button style={ui.btn(true)} onClick={() => void downloadPng()}>Export PNG</button>
-              <button style={ui.btn(true)} onClick={() => void sharePng()}>Share</button>
-            </div>
-
-            <div style={{ height: 12 }} />
-
-            <div style={ui.label}>
-              <span>Brush color</span>
-              <input
-                type="color"
-                value={brushColor.startsWith("#") ? brushColor : "#69f0ae"}
-                onChange={(e) => setBrushColor(e.target.value)}
-                style={{ width: 44, height: 28, background: "transparent", border: "none" }}
-              />
-            </div>
-
-            <div style={{ height: 10 }} />
-
-            <div style={ui.label}>
-              <span>Thickness</span>
-              <input
-                type="range"
-                min={1}
-                max={40}
-                step={0.5}
-                value={baseThickness}
-                onChange={(e) => setBaseThickness(parseFloat(e.target.value))}
-              />
-              <span style={{ width: 48, textAlign: "right" }}>{baseThickness.toFixed(1)}</span>
-            </div>
-
-            <div style={{ height: 10 }} />
-
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button style={ui.btn()} onClick={() => setGlow((v) => !v)}>{glow ? "Glow: On" : "Glow: Off"}</button>
-              <button style={ui.btn()} onClick={() => setShowLandmarks((v) => !v)}>{showLandmarks ? "Hide Landmarks" : "Show Landmarks"}</button>
-            </div>
-
-            <div style={{ height: 12 }} />
-
-            <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 10 }}>Quick Shapes</div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button style={ui.btn()} onClick={() => onQuickShape("circle")}>Circle</button>
-              <button style={ui.btn()} onClick={() => onQuickShape("square")}>Square</button>
-              <button style={ui.btn()} onClick={() => onQuickShape("triangle")}>Triangle</button>
-              <button style={ui.btn()} onClick={() => onQuickShape("heart")}>Heart</button>
-              <button style={ui.btn()} onClick={() => onQuickShape("star")}>Star</button>
-              <button style={ui.btn()} onClick={() => onQuickShape("arrow")}>Arrow</button>
-            </div>
-          </div>
-
-          <div style={ui.card}>
-            <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 10 }}>Social Share (Copy & Open)</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-              <button 
-                style={{ ...ui.btn(), background: "rgba(37,211,102,0.15)", border: "1px solid rgba(37,211,102,0.3)" }} 
-                onClick={() => void sharePng("whatsapp")}
-              >
-                WhatsApp
-              </button>
-              <button 
-                style={{ ...ui.btn(), background: "rgba(225,48,108,0.15)", border: "1px solid rgba(225,48,108,0.3)" }} 
-                onClick={() => void sharePng("instagram")}
-              >
-                Instagram
-              </button>
-              <button 
-                style={{ ...ui.btn(), background: "rgba(24,119,242,0.15)", border: "1px solid rgba(24,119,242,0.3)" }} 
-                onClick={() => void sharePng("facebook")}
-              >
-                Facebook
-              </button>
-              <button 
-                style={{ ...ui.btn(), background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.2)" }} 
-                onClick={() => void sharePng("x")}
-              >
-                X / Twitter
-              </button>
-            </div>
-            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-              <button style={{ ...ui.btn(), flex: 1 }} onClick={() => void copyToClipboard()}>Copy Image</button>
-              <button style={{ ...ui.btn(), flex: 1 }} onClick={() => void sharePng()}>Other...</button>
-            </div>
-            <div style={{ marginTop: 8, fontSize: 11, color: theme.muted }}>
-              Automatically copies image so you can just <b>Paste</b> in the app.
-            </div>
-          </div>
-
-          <div style={ui.card}>
-            <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 10 }}>Performance</div>
-
-            <div style={ui.label}>
-              <span>Inference preset</span>
-              <select
-                value={inferPreset}
-                onChange={(e) => setInferPreset(e.target.value as InferencePreset)}
-                style={{
-                  background: "rgba(0,0,0,0.35)",
-                  border: `1px solid ${theme.border}`,
-                  borderRadius: 10,
-                  color: theme.fg,
-                  padding: "8px 10px",
-                  fontFamily: fontStack,
-                }}
-              >
-                <option value="FAST">FAST (best speed)</option>
-                <option value="BALANCED">BALANCED</option>
-                <option value="HIGH">HIGH (best accuracy)</option>
-              </select>
-            </div>
-
-            <div style={{ height: 10 }} />
-
-            <div style={ui.label}>
-              <span>Inference FPS cap</span>
-              <input type="range" min={10} max={30} step={1} value={inferFpsCap} onChange={(e) => setInferFpsCap(parseInt(e.target.value, 10))} />
-              <span style={{ width: 32, textAlign: "right" }}>{inferFpsCap}</span>
-            </div>
-
-            <div style={{ height: 10 }} />
-
-            <div style={ui.label}>
-              <span>Max hands</span>
-              <input type="range" min={1} max={4} step={1} value={maxHands} onChange={(e) => setMaxHands(parseInt(e.target.value, 10))} />
-              <span style={{ width: 32, textAlign: "right" }}>{maxHands}</span>
-            </div>
-
-            <div style={{ marginTop: 10, fontSize: 12, color: theme.muted }}>
-              Tip: Low-end Android → FAST + 18–24 FPS cap.
-            </div>
-          </div>
-
-          <div style={ui.card}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-              <div style={{ fontSize: 13, fontWeight: 900 }}>Voice</div>
-              <div style={{ display: "flex", gap: 6 }}>
-                <button style={ui.btn()} onClick={resetVoice}>Reset</button>
-                <button style={ui.btn(voiceOn)} onClick={() => setVoiceOn((v) => !v)}>{voiceOn ? "Mic: On" : "Mic: Off"}</button>
-              </div>
-            </div>
-
-            <div style={{ marginTop: 10, fontSize: 12, color: theme.muted }}>{voiceHint}</div>
-            <div style={{ marginTop: 8, fontSize: 12, color: theme.muted }}>
-              Commands: “change color to red”, “glow off”, “thickness 12”, “draw small star”, “unlock guests”, “export”.
-            </div>
-          </div>
-
-          <div style={ui.card}>
-            <div style={{ fontSize: 12, color: theme.muted }}>
-              Status: {ready ? "Running" : loadingStep} • FPS {hud.fps.toFixed(1)} • Infer {hud.inferMs.toFixed(1)}ms • Strokes {hud.strokes} • Hands {hud.hands} • Guest {hud.guestUnlocked ? "ON" : "OFF"}
-            </div>
-          </div>
+    <div className="app-container">
+      {/* Opening Animation Overlay */}
+      {initialOverlay && (
+        <div className="opening-overlay">
+          <div className="nova-logo" />
+          <h1 style={{ marginTop: 24, fontSize: 32, fontWeight: 900, color: theme.accent, letterSpacing: 4 }}>NOVA PROTOCOL</h1>
+          <p style={{ marginTop: 8, color: theme.muted, fontSize: 14 }}>System Initializing...</p>
         </div>
+      )}
 
-        {/* Canvas Area */}
-        <div
-          style={{
-            position: "relative",
-            border: `1px solid ${theme.border}`,
-            borderRadius: 18,
-            overflow: "hidden",
-            aspectRatio: "16/9",
-            background: "rgba(255,255,255,0.03)",
-          }}
+      {/* Instructions Modal */}
+      <div className={`modal-backdrop ${showInstructions ? "open" : ""}`} onClick={() => setShowInstructions(false)} />
+      <div className={`instructions-modal ${showInstructions ? "open" : ""}`}>
+        <h2 style={{ marginBottom: 20, color: theme.accent }}>Instructions</h2>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12, fontSize: 14, color: theme.fg }}>
+          <p>• <strong>Point Index</strong> → Draw on canvas</p>
+          <p>• <strong>Pinch (Thumb + Index)</strong> → Grab and move strokes</p>
+          <p>• <strong>Twist while pinching</strong> → Rotate selected stroke</p>
+          <p>• <strong>Move hand closer/farther</strong> → Scale selected stroke</p>
+          <p>• <strong>Open Palm</strong> → Select existing strokes</p>
+          <p>• <strong>Voice Command</strong> → Start with "Nova..." (e.g., "Nova clear")</p>
+        </div>
+        <button 
+          className="btn btn-primary" 
+          style={{ marginTop: 24, width: "100%" }} 
+          onClick={() => setShowInstructions(false)}
         >
-          <video
-            ref={videoRef}
-            muted
-            playsInline
-            style={{
-              position: "absolute",
-              inset: 0,
-              width: "100%",
-              height: "100%",
-              objectFit: "cover",
-              transform: "scaleX(-1)",
-            }}
-          />
+          CLOSE
+        </button>
+      </div>
 
-          <canvas
-            ref={drawRef}
-            style={{
-              position: "absolute",
-              inset: 0,
-              width: "100%",
-              height: "100%",
-              pointerEvents: "none",
-              transform: "scaleX(-1)",
-            }}
-          />
-
-          <canvas
-            ref={overlayRef}
-            style={{
-              position: "absolute",
-              inset: 0,
-              width: "100%",
-              height: "100%",
-              pointerEvents: "none",
-              transform: "scaleX(-1)",
-            }}
-          />
-
-          <canvas ref={inferCanvasRef} style={{ display: "none" }} />
-
-          <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              pointerEvents: "none",
-              boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.05), inset 0 0 60px rgba(0,0,0,0.35)",
-            }}
-          />
+      {/* Left Panel */}
+      <div className="left-panel">
+        <div className="card">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <div className={`nova-indicator ${isSpeaking ? "speaking" : ""}`} />
+              <div style={{ fontSize: 20, fontWeight: 900, color: theme.accent }}>Nova Studio</div>
+            </div>
+            <button className="btn btn-primary" style={{ padding: "6px 12px", fontSize: 11 }} onClick={() => setShowInstructions(true)}>
+              INSTRUCTIONS
+            </button>
+          </div>
+          <div style={{ fontSize: 11, color: theme.muted, marginTop: 10 }}>
+            Protocol {ready ? "Active" : "Booting..."} • Voice Authorization Required
+          </div>
         </div>
+
+        <div className="card">
+          <div className="label-row" style={{ fontWeight: 900, color: theme.fg }}>Tools</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+            <button className="btn" title="Undo" onClick={undo}><Icons.Undo /></button>
+            <button className="btn" title="Redo" onClick={redo}><Icons.Redo /></button>
+            <button className="btn btn-danger" title="Clear All" onClick={clearAll}><Icons.Clear /></button>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8 }}>
+             <button className={`btn ${eraserMode ? "btn-primary" : ""}`} onClick={() => {
+                const nx = !eraserMode;
+                settingsRef.current.eraserMode = nx;
+                setEraserMode(nx);
+                if(nx) speak("Eraser enabled.");
+                else speak("Draw mode.");
+             }}>
+               {eraserMode ? "Eraser ON" : "Eraser Mode"}
+             </button>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8 }}>
+            <button className="btn btn-primary" onClick={() => void downloadPng()} style={{ gap:6 }}><Icons.Export /> PNG</button>
+            <button className="btn btn-primary" onClick={() => void sharePng()} style={{ gap:6 }}><Icons.Share /> Share</button>
+          </div>
+
+          <div style={{ height: 16 }} />
+
+          <div className="label-row">
+            <span>Brush Color</span>
+            <input
+              type="color"
+              value={brushColor.startsWith("#") ? brushColor : "#69f0ae"}
+              onChange={(e) => setBrushColor(e.target.value)}
+              style={{ width: 44, height: 28, background: "transparent", border: "none", cursor: "pointer" }}
+            />
+          </div>
+
+          <div className="label-row">
+            <span>Thickness</span>
+            <input
+              type="range"
+              min={1}
+              max={40}
+              step={0.5}
+              value={baseThickness}
+              onChange={(e) => setBaseThickness(parseFloat(e.target.value))}
+              style={{ flex: 1 }}
+            />
+            <span style={{ width: 40, textAlign: "right", color: theme.accent }}>{baseThickness.toFixed(0)}</span>
+          </div>
+
+          <div style={{ height: 16 }} />
+          
+          <div className="label-row" style={{ fontWeight: 900, color: theme.fg }}>Quick Shapes</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
+            <button className="btn icon-btn" onClick={() => onQuickShape("circle")}><Icons.Circle /></button>
+            <button className="btn icon-btn" onClick={() => onQuickShape("square")}><Icons.Square /></button>
+            <button className="btn icon-btn" onClick={() => onQuickShape("star")}><Icons.Star /></button>
+            <button className="btn icon-btn" onClick={() => onQuickShape("heart")}><Icons.Heart /></button>
+            <button className="btn icon-btn" onClick={() => onQuickShape("arrow")}><Icons.Arrow /></button>
+            <button className="btn icon-btn" onClick={() => onQuickShape("triangle")}><Icons.Triangle /></button>
+          </div>
+
+          <div style={{ height: 12 }} />
+
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn" style={{ flex: 1, gap:6 }} onClick={() => setGlow((v) => !v)}>
+              <Icons.Glow /> {glow ? "On" : "Off"}
+            </button>
+            <button className="btn" style={{ flex: 1, gap:6 }} onClick={() => setShowLandmarks((v) => !v)}>
+              <Icons.Landmarks /> {showLandmarks ? "On" : "Off"}
+            </button>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="label-row" style={{ fontWeight: 900, color: theme.fg }}>Social Protocol</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            <button className="btn" style={{ background: "rgba(37,211,102,0.1)" }} onClick={() => void sharePng("whatsapp")}><Icons.WhatsApp /></button>
+            <button className="btn" style={{ background: "rgba(225,48,108,0.1)" }} onClick={() => void sharePng("instagram")}><Icons.Instagram /></button>
+            <button className="btn" style={{ background: "rgba(24,119,242,0.1)" }} onClick={() => void sharePng("facebook")}><Icons.Facebook /></button>
+            <button className="btn" style={{ background: "rgba(255,255,255,0.05)" }} onClick={() => void sharePng("x")}><Icons.Twitter /></button>
+          </div>
+          <button className="btn" style={{ marginTop: 8, width: "100%" }} onClick={() => void copyToClipboard()}>COPY TO CLIPBOARD</button>
+        </div>
+
+        <div className="card">
+          <div className="label-row" style={{ fontWeight: 900, color: theme.fg }}>System Config</div>
+          <div className="label-row">
+            <span>Accuracy</span>
+            <select
+              value={inferPreset}
+              onChange={(e) => setInferPreset(e.target.value as InferencePreset)}
+              style={{
+                background: "rgba(255,255,255,0.05)",
+                border: "1px solid var(--border)",
+                borderRadius: 8,
+                color: theme.fg,
+                padding: "4px 8px",
+              }}
+            >
+              <option value="FAST">Fast</option>
+              <option value="BALANCED">Balanced</option>
+              <option value="HIGH">High</option>
+            </select>
+          </div>
+
+          <div className="label-row">
+            <span>FPS Cap</span>
+            <input type="range" min={10} max={30} step={1} value={inferFpsCap} onChange={(e) => setInferFpsCap(parseInt(e.target.value, 10))} />
+            <span style={{ width: 24, textAlign: "right" }}>{inferFpsCap}</span>
+          </div>
+        </div>
+
+        <div className="card">
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ fontSize: 13, fontWeight: 900 }}>Nova Core</div>
+            <button className={`btn ${voiceOn ? "btn-primary" : ""}`} onClick={() => setVoiceOn((v) => !v)}>
+              {voiceOn ? <Icons.MicOn /> : <Icons.MicOff />}
+            </button>
+          </div>
+          <div style={{ marginTop: 10, fontSize: 11, color: theme.muted, fontStyle: "italic" }}>
+            {voiceHint}
+          </div>
+        </div>
+
+        <div className="card" style={{ fontSize: 11, color: theme.muted }}>
+          FPS {hud.fps.toFixed(0)} • Latency {hud.inferMs.toFixed(0)}ms • Strokes {hud.strokes} • Guest {hud.guestUnlocked ? "Unlocked" : "Locked"}
+        </div>
+      </div>
+
+      {/* Main Interaction Stage */}
+      <div className={`canvas-wrapper ${tracksRef.current.length > 0 ? "active" : ""}`}>
+        <video ref={videoRef} className="video-layer" muted playsInline />
+        <canvas ref={drawRef} className="canvas-layer" />
+        <canvas ref={overlayRef} className="canvas-layer" />
+        <canvas ref={inferCanvasRef} style={{ display: "none" }} />
+        
+        {/* Vignette & HUD Overlays */}
+        <div style={{ position: "absolute", inset: 0, pointerEvents: "none", boxShadow: "inset 0 0 100px rgba(0,0,0,0.5)" }} />
+        {!ready && (
+          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.4)", backdropFilter: "blur(8px)" }}>
+            <div style={{ textAlign: "center" }}>
+              <div className="nova-logo" style={{ margin: "0 auto 20px" }} />
+              <div style={{ fontSize: 18, fontWeight: 900, color: theme.accent }}>{loadingStep}</div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
