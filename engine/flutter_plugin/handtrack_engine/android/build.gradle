@@ -1,3 +1,4 @@
+// Android build configuration for handtrack_engine
 group 'com.boxscraps.handtrack_engine'
 version '0.1.0'
 

@@ -1,0 +1,3 @@
+rootProject.name = 'handtrack_engine'
+
+// Don't include any subprojects - this is a library module itself

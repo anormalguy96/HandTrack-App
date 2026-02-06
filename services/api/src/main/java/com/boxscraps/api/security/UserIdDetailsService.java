@@ -15,8 +15,10 @@ class UserIdDetailsService implements UserDetailsService {
     }
 
     @Override
-    @SuppressWarnings("null")
     public org.springframework.security.core.userdetails.UserDetails loadUserByUsername(String userId) {
+        if (userId == null) {
+            throw new org.springframework.security.core.userdetails.UsernameNotFoundException("User id is null");
+        }
         var u = users.findById(java.util.UUID.fromString(userId))
                 .orElseThrow(() -> new org.springframework.security.core.userdetails.UsernameNotFoundException(
                         "User not found"));

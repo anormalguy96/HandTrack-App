@@ -1,3 +1,5 @@
+rootProject.name = "handtrack_mobile_android"
+
 pluginManagement {
     val flutterSdkPath =
         run {
