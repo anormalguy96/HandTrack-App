@@ -1,0 +1,10 @@
+[build]
+  base = "apps/web"
+  command = "npm run build"
+  publish = "apps/web/dist"
+
+[functions]
+  directory = "apps/web/netlify/functions"
+
+[build.environment]
+  NODE_VERSION = "20"
