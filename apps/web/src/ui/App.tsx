@@ -438,6 +438,9 @@ export default function App() {
   const [maxHands, setMaxHands] = useState(settingsRef.current.maxHands);
   const [eraserMode, setEraserMode] = useState(false); // Type 2 eraser UI state
   const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
+  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
+  const [preferIntegrated, setPreferIntegrated] = useState(true);
 
   // Auto-hide initial overlay
   useEffect(() => {
@@ -1211,6 +1214,32 @@ export default function App() {
   }, []);
 
   /* ------------------------------ camera + model boot ------------------------------ */
+  const updateDevices = useCallback(async () => {
+    try {
+      const all = await navigator.mediaDevices.enumerateDevices();
+      const video = all.filter(d => d.kind === "videoinput");
+      setDevices(video);
+      
+      if (preferIntegrated && video.length > 0) {
+        const integrated = video.find(d => 
+          /integrated|built-in|facetime|front/i.test(d.label)
+        );
+        if (integrated) setSelectedDeviceId(integrated.deviceId);
+      }
+    } catch (e) {
+      console.warn("Device enumeration failed:", e);
+    }
+  }, [preferIntegrated]);
+
+  useEffect(() => {
+    updateDevices();
+  }, [preferIntegrated, updateDevices]);
+
+  // Restart camera when device/facing selection changes
+  useEffect(() => {
+    if (ready) startCamera();
+  }, [selectedDeviceId, facingMode]);
+
   const startCamera = useCallback(async () => {
     const v = videoRef.current;
     if (!v) return;
@@ -1223,19 +1252,26 @@ export default function App() {
 
       console.log("[startCamera] Requesting getUserMedia...");
       
-      // [FIX] Portrait Mode Detection
+      // [FIX] Responsive constraints based on container aspect
       const isPortrait = window.innerHeight > window.innerWidth;
       const idealW = isPortrait ? 720 : 1280;
       const idealH = isPortrait ? 1280 : 720;
       
-      const stream = await navigator.mediaDevices.getUserMedia({
+      const constraints: MediaStreamConstraints = {
         video: {
-          facingMode: facingMode,
           width: { ideal: idealW },
           height: { ideal: idealH },
         },
-        audio: false, // Audio handled by VAD only
-      });
+        audio: false,
+      };
+
+      if (selectedDeviceId) {
+        (constraints.video as MediaTrackConstraints).deviceId = { exact: selectedDeviceId };
+      } else {
+        (constraints.video as MediaTrackConstraints).facingMode = facingMode;
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
 
       v.muted = true;
       v.playsInline = true;
@@ -1268,7 +1304,7 @@ export default function App() {
       console.error("[startCamera] CRITICAL ERROR:", e);
       throw e;
     }
-  }, [resizeCanvasesToVideo, facingMode]);
+  }, [resizeCanvasesToVideo, facingMode, selectedDeviceId]);
 
   /* ------------------------------ track assignment ------------------------------ */
   const assignTracks = useCallback((dets: HandDet[], nowMs: number) => {
@@ -1727,12 +1763,22 @@ export default function App() {
   useEffect(() => {
     let mounted = true;
 
-    const onResize = () => resizeCanvasesToVideo();
+    const onResize = () => {
+      resizeCanvasesToVideo();
+      // Restart camera if orientation flipped significantly
+      const isPortrait = window.innerHeight > window.innerWidth;
+      // We can store the last aspect in a ref if we want to be more efficient,
+      // but for now, we'll just let the canvases resize.
+    };
     window.addEventListener("resize", onResize);
+    window.addEventListener("orientationchange", () => {
+      if (ready) startCamera();
+    });
 
     (async () => {
       setLoadingStep("1/4 Camera…");
       try {
+        await updateDevices();
         await startCamera();
       } catch (e: any) {
         setLoadingStep(`Cam ERROR: ${e.name || "Access"}`);
@@ -2268,6 +2314,47 @@ export default function App() {
             <span>FPS Cap</span>
             <input type="range" min={10} max={30} step={1} value={inferFpsCap} onChange={(e) => setInferFpsCap(parseInt(e.target.value, 10))} />
             <span style={{ width: 24, textAlign: "right" }}>{inferFpsCap}</span>
+          </div>
+
+          <div style={{ height: 12 }} />
+          <div className="label-row" style={{ fontWeight: 900, color: theme.fg }}>Camera Selection</div>
+          
+          <div className="label-row">
+            <span>Prefer Integrated</span>
+            <button 
+              className={`btn ${preferIntegrated ? "btn-primary" : ""}`}
+              style={{ padding: "4px 8px", fontSize: 10 }}
+              onClick={() => setPreferIntegrated(!preferIntegrated)}
+            >
+              {preferIntegrated ? "ON" : "OFF"}
+            </button>
+          </div>
+
+          <div className="label-row">
+            <span>Source</span>
+            <select
+              value={selectedDeviceId}
+              onChange={(e) => {
+                setSelectedDeviceId(e.target.value);
+                if (preferIntegrated) setPreferIntegrated(false);
+              }}
+              style={{
+                background: "rgba(255,255,255,0.05)",
+                border: "1px solid var(--border)",
+                borderRadius: 8,
+                color: theme.fg,
+                padding: "4px 8px",
+                maxWidth: "140px",
+                fontSize: 10
+              }}
+            >
+              <option value="">Default (Facing Mode)</option>
+              {devices.map(d => (
+                <option key={d.deviceId} value={d.deviceId}>
+                  {d.label || `Camera ${d.deviceId.slice(0, 4)}`}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 
