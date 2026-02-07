@@ -56,15 +56,101 @@ body {
   }
 }
 
+.mobile-only {
+  display: none;
+}
+
 @media (max-width: 600px) {
+  .desktop-only {
+    display: none;
+  }
+
+  .mobile-only {
+    display: flex;
+  }
+
   .app-container {
-    padding: 10px;
-    gap: 12px;
+    padding: 0;
+    gap: 0;
+    display: block;
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  .canvas-wrapper {
+    position: absolute;
+    top: 50%;
+    left: 25px;
+    right: 25px;
+    transform: translateY(
+      -55%
+    ); /* Slightly above center to allow room for bottom UI */
+    margin: 0;
+    border-radius: 20px;
+    z-index: 1;
+    height: auto;
+  }
+
+  .left-panel {
+    display: block;
+    position: static;
+  }
+
+  .corner-tl,
+  .corner-bl,
+  .corner-br,
+  .corner-tr {
+    position: absolute;
+    z-index: 10;
+    padding: 8px;
+    border-radius: 12px;
+    background: var(--panel);
+  }
+
+  .corner-tl {
+    top: 15px;
+    left: 15px;
+  }
+
+  .corner-tr {
+    top: 15px;
+    right: 15px;
+  }
+
+  .corner-bl {
+    bottom: 110px;
+    left: 15px;
+  }
+
+  .corner-br {
+    bottom: 110px;
+    right: 15px;
+  }
+
+  .nova-status-container {
+    position: absolute;
+    bottom: 40px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 20;
+  }
+
+  .mobile-voice-hint {
+    position: absolute;
+    bottom: 15px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 10px;
+    color: var(--muted);
+    font-style: italic;
+    white-space: nowrap;
+    z-index: 20;
   }
 
   .card {
-    padding: 12px;
-    border-radius: 16px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
   }
 }
 
