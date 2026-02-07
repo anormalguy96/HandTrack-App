@@ -30,13 +30,24 @@ class _HandtrackViewState extends State<HandtrackView> {
   static const _viewType = "handtrack_engine/view";
   StreamSubscription? _sub;
 
+  int? _viewId;
+
   @override
   void dispose() {
     _sub?.cancel();
     super.dispose();
   }
 
+  @override
+  void didUpdateWidget(HandtrackView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_viewId != null && widget.config != oldWidget.config) {
+      HandtrackController.forViewId(_viewId!).setConfig(widget.config);
+    }
+  }
+
   void _bindStream(int id) {
+    _viewId = id;
     _sub?.cancel();
     final events = EventChannel("handtrack_engine/events_$id");
     _sub = events.receiveBroadcastStream().listen((evt) {

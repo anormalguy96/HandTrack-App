@@ -294,6 +294,21 @@ class _HandtrackScreenState extends State<HandtrackScreen> {
                       visualDensity: VisualDensity.compact,
                     ),
                     IconButton(
+                        icon: Icon(
+                            _cfg.preferFrontCamera
+                                ? Icons.camera_front
+                                : Icons.camera_rear,
+                            color: Colors.white70,
+                            size: 20),
+                        onPressed: () => setState(() {
+                              _cfg = HandtrackConfig(
+                                preferFrontCamera: !_cfg.preferFrontCamera,
+                                targetFps: _cfg.targetFps,
+                              );
+                              _status = "Switching Camera...";
+                            }),
+                        visualDensity: VisualDensity.compact),
+                    IconButton(
                         icon: const Icon(Icons.refresh,
                             color: Colors.white70, size: 20),
                         onPressed: _resetEngine,
@@ -327,38 +342,6 @@ class _HandtrackScreenState extends State<HandtrackScreen> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           _socialButton(Icons.share_outlined, Colors.cyanAccent, _share),
-          const SizedBox(width: 25),
-          GestureDetector(
-            onTap: () => setState(() {
-              _cfg = HandtrackConfig(
-                preferFrontCamera: !_cfg.preferFrontCamera,
-                targetFps: _cfg.targetFps,
-              );
-              _status = "Switching Camera...";
-            }),
-            child: Container(
-              width: 64,
-              height: 64,
-              decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    colors: [
-                      Colors.white.withValues(alpha: 0.15),
-                      Colors.white.withValues(alpha: 0.05)
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  border:
-                      Border.all(color: Colors.white.withValues(alpha: 0.2)),
-                  boxShadow: const [
-                    BoxShadow(
-                        color: Colors.black26, blurRadius: 10, spreadRadius: 1)
-                  ]),
-              child: const Icon(Icons.flip_camera_ios,
-                  color: Colors.white, size: 30),
-            ),
-          ),
         ],
       ),
     );

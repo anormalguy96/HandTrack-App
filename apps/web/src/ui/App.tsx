@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import {
   FilesetResolver,
   GestureRecognizer,
   FaceLandmarker, // [NEW] Added for AR
   DrawingUtils,
-  HandLandmarkerResult
+  HandLandmarkerResult,
+  GestureRecognizerResult,
+  FaceLandmarkerResult
 } from "@mediapipe/tasks-vision";
 import "./App.css";
 
@@ -335,6 +337,7 @@ const Icons = {
   Instagram: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>,
   Facebook: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>,
   Twitter: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 3a10.9 10.9 0 0 1-3.14 1.53 4.48 4.48 0 0 0-7.86 3v1A10.66 10.66 0 0 1 3 4s-4 9 5 13a11.64 11.64 0 0 1-7 2c9 5 20 0 20-11.5a4.5 4.5 0 0 0-.08-.83A7.72 7.72 0 0 0 23 3z"/></svg>,
+  Cameraswitch: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 21l-4-4 4-4"/><path d="M3 17h18"/><path d="M17 3l4 4-4 4"/><path d="M21 7H3"/></svg>,
 };
 
 /* ------------------------------- Main Component --------------------------- */
@@ -370,7 +373,7 @@ export default function App() {
   const strokesRef = useRef<Stroke[]>([]);
   const redoRef = useRef<Stroke[]>([]);
   const tracksRef = useRef<Track[]>([]);
-  const faceResultsRef = useRef<any>(null); // [NEW] Ref to bridge inference and render loops
+  const faceResultsRef = useRef<FaceLandmarkerResult | null>(null); // [NEW] Ref to bridge inference and render loops
   const needsFullRedrawRef = useRef(false);
 
   // admin/guest control
@@ -434,6 +437,7 @@ export default function App() {
   const [inferFpsCap, setInferFpsCap] = useState(settingsRef.current.inferFpsCap);
   const [maxHands, setMaxHands] = useState(settingsRef.current.maxHands);
   const [eraserMode, setEraserMode] = useState(false); // Type 2 eraser UI state
+  const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
 
   // Auto-hide initial overlay
   useEffect(() => {
@@ -1226,7 +1230,7 @@ export default function App() {
       
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
-          facingMode: "user",
+          facingMode: facingMode,
           width: { ideal: idealW },
           height: { ideal: idealH },
         },
@@ -1264,7 +1268,7 @@ export default function App() {
       console.error("[startCamera] CRITICAL ERROR:", e);
       throw e;
     }
-  }, [resizeCanvasesToVideo]);
+  }, [resizeCanvasesToVideo, facingMode]);
 
   /* ------------------------------ track assignment ------------------------------ */
   const assignTracks = useCallback((dets: HandDet[], nowMs: number) => {
@@ -1546,7 +1550,7 @@ export default function App() {
   );
 
   /* ------------------------------ overlay render ------------------------------ */
-  const renderOverlay = useCallback((faceRes?: any) => {
+  const renderOverlay = useCallback((faceRes?: FaceLandmarkerResult | null) => {
     const ov = overlayRef.current;
     const canvas = drawRef.current;
     if (!ov || !canvas) return;
@@ -1856,11 +1860,9 @@ export default function App() {
         ictx.drawImage(v, 0, 0, infer.width, infer.height);
 
         const t0 = performance.now();
-        const res = lm.recognizeForVideo(v, performance.now());
+        const res: GestureRecognizerResult = lm.recognizeForVideo(v, performance.now());
         
-        // Face Detection (if enabled by AR items being active, or always)
-        // Optimization: Only run if AR items are active or we want face features
-        let faceRes = null;
+        let faceRes: FaceLandmarkerResult | null = null;
         if (faceLandmarker) {
              faceRes = faceLandmarker.detectForVideo(v, performance.now());
              faceResultsRef.current = faceRes; // [NEW] Update ref
@@ -2272,9 +2274,21 @@ export default function App() {
         <div className="card">
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <div style={{ fontSize: 13, fontWeight: 900 }}>Nova Core</div>
-            <button className={`btn ${voiceOn ? "btn-primary" : ""}`} onClick={() => setVoiceOn((v) => !v)}>
-              {voiceOn ? <Icons.MicOn /> : <Icons.MicOff />}
-            </button>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button 
+                className="btn" 
+                title="Swap Camera"
+                onClick={() => {
+                  setFacingMode((f: "user" | "environment") => f === "user" ? "environment" : "user");
+                  speak("Switching camera.");
+                }}
+              >
+                <Icons.Cameraswitch />
+              </button>
+              <button className={`btn ${voiceOn ? "btn-primary" : ""}`} onClick={() => setVoiceOn((v) => !v)}>
+                {voiceOn ? <Icons.MicOn /> : <Icons.MicOff />}
+              </button>
+            </div>
           </div>
           <div style={{ marginTop: 10, fontSize: 11, color: theme.muted, fontStyle: "italic" }}>
             {voiceHint}
