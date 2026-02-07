@@ -441,6 +441,7 @@ export default function App() {
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
   const [preferIntegrated, setPreferIntegrated] = useState(true);
+  const [videoAspect, setVideoAspect] = useState(16/9);
 
   // Auto-hide initial overlay
   useEffect(() => {
@@ -616,8 +617,11 @@ export default function App() {
     const ov = overlayRef.current;
     if (!v || !draw || !ov) return;
 
-    const w = v.videoWidth || 1280;
-    const h = v.videoHeight || 720;
+    const w = v.videoWidth;
+    const h = v.videoHeight;
+    if (!w || !h) return;
+
+    setVideoAspect(w / h);
 
     if (draw.width !== w || draw.height !== h) {
       draw.width = w;
@@ -2388,7 +2392,10 @@ export default function App() {
       </div>
 
       {/* Main Interaction Stage */}
-      <div className={`canvas-wrapper ${tracksRef.current.length > 0 ? "active" : ""}`}>
+      <div 
+        className={`canvas-wrapper ${tracksRef.current.length > 0 ? "active" : ""}`}
+        style={{ aspectRatio: `${videoAspect}` }}
+      >
         <video ref={videoRef} className="video-layer" muted playsInline />
         <canvas ref={drawRef} className="canvas-layer" />
         <canvas ref={overlayRef} className="canvas-layer" />
