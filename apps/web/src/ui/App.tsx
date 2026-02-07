@@ -1218,6 +1218,10 @@ export default function App() {
   }, []);
 
   /* ------------------------------ camera + model boot ------------------------------ */
+  const isMobile = useCallback(() => {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  }, []);
+
   const updateDevices = useCallback(async () => {
     try {
       const all = await navigator.mediaDevices.enumerateDevices();
@@ -1256,10 +1260,16 @@ export default function App() {
 
       console.log("[startCamera] Requesting getUserMedia...");
       
-      // [FIX] Responsive constraints based on container aspect
-      const isPortrait = window.innerHeight > window.innerWidth;
-      const idealW = isPortrait ? 720 : 1280;
-      const idealH = isPortrait ? 1280 : 720;
+      // [FIX] FOV Crop fix: Laptops use Landscape 16:9, Mobile uses Portrait 9:16
+      const mobile = isMobile();
+      const isPortraitWindow = window.innerHeight > window.innerWidth;
+      
+      // On desktop/laptop, we almost always want landscape to avoid sensor cropping (FOV loss)
+      // unless the user specifies otherwise or it's a very specific mobile-like tablet.
+      const usePortrait = mobile && isPortraitWindow;
+      
+      const idealW = usePortrait ? 720 : 1280;
+      const idealH = usePortrait ? 1280 : 720;
       
       const constraints: MediaStreamConstraints = {
         video: {
