@@ -46,6 +46,22 @@ body {
   display: none;
 }
 
+.mobile-only {
+  display: flex !important;
+}
+.desktop-only {
+  display: none !important;
+}
+
+@media (min-width: 1025px) {
+  .mobile-only {
+    display: none !important;
+  }
+  .desktop-only {
+    display: flex !important;
+  }
+}
+
 /* ---------------- DESKTOP STYLES ---------------- */
 .left-panel {
   display: flex;
@@ -507,15 +523,25 @@ select option {
 }
 
 .flux-status-container {
-  position: absolute;
-  bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 100;
   display: flex;
   align-items: center;
   justify-content: center;
   pointer-events: none;
+}
+
+.mobile-only.flux-status-container {
+  position: absolute;
+  bottom: calc(32px + env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+}
+
+.desktop-only.flux-status-container {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  z-index: 100;
 }
 
 .flux-indicator {

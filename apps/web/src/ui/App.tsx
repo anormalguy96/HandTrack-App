@@ -77,11 +77,12 @@ function uid() {
 function emptyBBox(): BBox {
   return { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
 }
-function expandBBox(bb: BBox, p: Pt) {
-  bb.minX = Math.min(bb.minX, p.x);
-  bb.minY = Math.min(bb.minY, p.y);
-  bb.maxX = Math.max(bb.maxX, p.x);
-  bb.maxY = Math.max(bb.maxY, p.y);
+function expandBBox(bb: BBox, p: Pt, w = 0) {
+  const r = w / 2;
+  bb.minX = Math.min(bb.minX, p.x - r);
+  bb.minY = Math.min(bb.minY, p.y - r);
+  bb.maxX = Math.max(bb.maxX, p.x + r);
+  bb.maxY = Math.max(bb.maxY, p.y + r);
 }
 function padBBox(bb: BBox, pad: number): BBox {
   return {
@@ -100,17 +101,18 @@ function isMobile() {
 function bboxContains(bb: BBox, p: Pt) {
   return p.x >= bb.minX && p.x <= bb.maxX && p.y >= bb.minY && p.y <= bb.maxY;
 }
-function computeBBox(pts: { x: number; y: number }[]): BBox {
+function computeBBox(pts: StrokePoint[]): BBox {
   if (!pts.length) return emptyBBox();
   let minX = Infinity,
     minY = Infinity,
     maxX = -Infinity,
     maxY = -Infinity;
   for (const p of pts) {
-    minX = Math.min(minX, p.x);
-    minY = Math.min(minY, p.y);
-    maxX = Math.max(maxX, p.x);
-    maxY = Math.max(maxY, p.y);
+    const r = p.w / 2;
+    minX = Math.min(minX, p.x - r);
+    minY = Math.min(minY, p.y - r);
+    maxX = Math.max(maxX, p.x + r);
+    maxY = Math.max(maxY, p.y + r);
   }
   return { minX, minY, maxX, maxY };
 }
@@ -720,6 +722,20 @@ const Icons = {
       <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
     </svg>
   ),
+  Telegram: () => (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+    </svg>
+  ),
   Instagram: () => (
     <svg
       width="20"
@@ -800,6 +816,27 @@ const Icons = {
       <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z" />
     </svg>
   ),
+  Media: () => (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18" />
+      <line x1="7" y1="2" x2="7" y2="22" />
+      <line x1="17" y1="2" x2="17" y2="22" />
+      <line x1="2" y1="12" x2="22" y2="12" />
+      <line x1="2" y1="7" x2="7" y2="7" />
+      <line x1="2" y1="17" x2="7" y2="17" />
+      <line x1="17" y1="17" x2="22" y2="17" />
+      <line x1="17" y1="7" x2="22" y2="7" />
+    </svg>
+  ),
 };
 
 function getMapScale(
@@ -843,6 +880,7 @@ export default function App() {
   const drawRef = useRef<HTMLCanvasElement | null>(null);
   const overlayRef = useRef<HTMLCanvasElement | null>(null);
   const inferCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const bufferCanvasRef = useRef<HTMLCanvasElement | null>(null); // [NEW] Offscreen baking
 
   /* -------------------------- MediaPipe landmarker ------------------------- */
   /* -------------------------- MediaPipe landmarker ------------------------- */
@@ -887,6 +925,7 @@ export default function App() {
 
   // Fast lookup for strokes
   const strokeByIdRef = useRef<Map<string, Stroke>>(new Map());
+  const bakedCountRef = useRef(0); // [NEW] How many strokes are in bufferCanvas
 
   // AR enabled flag without causing inference loop re-renders
   const arEnabledRef = useRef(false);
@@ -912,6 +951,49 @@ export default function App() {
     lastAng: 0,
     lastMid: { x: 0, y: 0 } as Pt,
   });
+
+  // [POOL] Pre-allocated object pools for inference loop
+  const detPoolRef = useRef<HandDet[]>([]);
+  const ptPoolRef = useRef<Pt[]>([]);
+  const nextPtIdxRef = useRef(0);
+
+  useEffect(() => {
+    // Warm up pools
+    detPoolRef.current = Array.from({ length: 8 }, () => ({
+      handIndex: 0,
+      handedness: "Unknown",
+      wrist: { x: 0, y: 0 },
+      palm: { x: 0, y: 0 },
+      indexTip: { x: 0, y: 0 },
+      indexPip: { x: 0, y: 0 },
+      thumbTip: { x: 0, y: 0 },
+      indexMcp: { x: 0, y: 0 },
+      middleMcp: { x: 0, y: 0 },
+      middleTip: { x: 0, y: 0 },
+      ringTip: { x: 0, y: 0 },
+      pinkyTip: { x: 0, y: 0 },
+      middlePip: { x: 0, y: 0 },
+      ringPip: { x: 0, y: 0 },
+      pinkyPip: { x: 0, y: 0 },
+      scalePx: 0,
+      pinchStrength: 0,
+      rawPoint: false,
+      rawPalm: false,
+      rawGrab: false,
+      rawLandmarks: [],
+    }));
+    ptPoolRef.current = Array.from({ length: 200 }, () => ({ x: 0, y: 0 }));
+  }, []);
+
+  const getPoolPt = (x: number, y: number): Pt => {
+    const pool = ptPoolRef.current;
+    if (!pool.length) return { x, y }; // Fallback
+    const p = pool[nextPtIdxRef.current];
+    p.x = x;
+    p.y = y;
+    nextPtIdxRef.current = (nextPtIdxRef.current + 1) % pool.length;
+    return p;
+  };
 
   /* ------------------------------- settings ------------------------------- */
   const settingsRef = useRef({
@@ -952,7 +1034,7 @@ export default function App() {
     voiceOnRef.current = voiceOn;
   }, [voiceOn]);
   const [voiceHint, setVoiceHint] = useState(
-    'Try: "Flux change color to red", "Flux glow off", "Flux export".',
+    'Try: "Flux change color to red", "Flux change the thickness to 12", "Flux glow off", "Flux export".',
   );
   const [isSpeaking, setIsSpeaking] = useState(false);
 
@@ -1207,6 +1289,11 @@ export default function App() {
     if (draw.width !== targetW || draw.height !== targetH) {
       draw.width = targetW;
       draw.height = targetH;
+      if (!bufferCanvasRef.current)
+        bufferCanvasRef.current = document.createElement("canvas");
+      bufferCanvasRef.current.width = targetW;
+      bufferCanvasRef.current.height = targetH;
+      bakedCountRef.current = 0; // Reset baking on resize
       needsFullRedrawRef.current = true;
     }
     if (ov.width !== targetW || ov.height !== targetH) {
@@ -1249,26 +1336,42 @@ export default function App() {
 
   const fullRedraw = useCallback(() => {
     const canvas = drawRef.current;
-    if (!canvas) return;
+    const buffer = bufferCanvasRef.current;
+    if (!canvas || !buffer) return;
+
+    const bctx = buffer.getContext("2d")!;
     const ctx = canvas.getContext("2d")!;
+
+    bctx.clearRect(0, 0, buffer.width, buffer.height);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     const glowOn = settingsRef.current.glow;
-    for (const stroke of strokesRef.current) {
+    const strokes = strokesRef.current;
+
+    // Full Bake - Draw all finished strokes into buffer
+    for (const stroke of strokes) {
       if (stroke.points.length < 2) continue;
       for (let i = 1; i < stroke.points.length; i++) {
-        const a = stroke.points[i - 1];
-        const b = stroke.points[i];
-        paintStrokeSegment(ctx, stroke.color, a, b, glowOn);
+        paintStrokeSegment(
+          bctx,
+          stroke.color,
+          stroke.points[i - 1],
+          stroke.points[i],
+          glowOn,
+        );
       }
     }
+
+    bakedCountRef.current = strokes.length;
+    // Composite buffer onto screen
+    ctx.drawImage(buffer, 0, 0);
   }, [paintStrokeSegment]);
 
   const startStroke = useCallback(
     (color: string, p: Pt, t: number, thickness: number): string => {
       redoRef.current = [];
       const bb = emptyBBox();
-      expandBBox(bb, p);
+      expandBBox(bb, p, thickness);
       const s: Stroke = {
         id: uid(),
         color,
@@ -1287,9 +1390,26 @@ export default function App() {
       const s = strokeByIdRef.current.get(strokeId);
       if (!s) return;
 
-      const sp: StrokePoint = { x: p.x, y: p.y, t, w: thickness };
+      let finalW = thickness;
+      if (s.points.length > 0) {
+        const prev = s.points[s.points.length - 1];
+        const dt = Math.max(8, t - prev.t); // Min 8ms to avoid div by zero/jitter
+        const d = dist(prev, p);
+        const velocity = d / dt;
+
+        // Refined Taper: fast = thinner, slow = thicker
+        // We use a power function for more aggressive tapering at high speeds
+        const velFactor = Math.exp(-velocity * 0.75);
+        const targetW = thickness * (0.2 + 0.8 * velFactor);
+
+        // Adaptive EMA: faster strokes need more smoothing to hide jitter
+        const lerpFactor = clamp(0.1 + velocity * 0.2, 0.1, 0.4);
+        finalW = prev.w * (1 - lerpFactor) + targetW * lerpFactor;
+      }
+
+      const sp: StrokePoint = { x: p.x, y: p.y, t, w: finalW };
       s.points.push(sp);
-      expandBBox(s.bbox, p);
+      expandBBox(s.bbox, p, finalW);
 
       const canvas = drawRef.current;
       if (!canvas) return;
@@ -1313,6 +1433,7 @@ export default function App() {
     if (last) {
       strokeByIdRef.current.delete(last.id);
       redoRef.current.push(last);
+      bakedCountRef.current = 0; // Force re-bake
       needsFullRedrawRef.current = true;
       speak("Undo.");
     }
@@ -1325,6 +1446,7 @@ export default function App() {
     if (back) {
       strokesRef.current.push(back);
       strokeByIdRef.current.set(back.id, back);
+      bakedCountRef.current = 0; // Force re-bake
       needsFullRedrawRef.current = true;
       speak("Redo.");
     }
@@ -1340,8 +1462,12 @@ export default function App() {
   }, [speak]);
 
   /* ------------------------------- Eraser Logic ------------------------------- */
-  const eraseStrokeAt = useCallback((pt: Pt) => {
-    const radius = 30; // Eraser radius
+  const eraseStrokeAt = useCallback((pt: Pt, scalePx: number) => {
+    // Dynamic radius based on hand scale (further hands = larger erase area in screen coords)
+    const baseRadius = 30;
+    const handFactor = clamp(scalePx / 100, 0.5, 2.0);
+    const radius = baseRadius * handFactor;
+
     const nextStrokes: Stroke[] = [];
     let changed = false;
 
@@ -1590,24 +1716,35 @@ export default function App() {
   );
 
   /* ------------------------------ export helpers ------------------------------ */
-  const exportBlobMirrored = useCallback(async (): Promise<Blob | null> => {
-    const canvas = drawRef.current;
-    if (!canvas) return null;
+  const exportBlobMirrored = useCallback(
+    async (
+      mime: string = "image/png",
+      quality: number = 0.9,
+    ): Promise<Blob | null> => {
+      const canvas = drawRef.current;
+      if (!canvas) return null;
 
-    const tmp = document.createElement("canvas");
-    tmp.width = canvas.width;
-    tmp.height = canvas.height;
-    const tctx = tmp.getContext("2d")!;
-    tctx.save();
-    tctx.translate(tmp.width, 0);
-    tctx.scale(-1, 1);
-    tctx.drawImage(canvas, 0, 0);
-    tctx.restore();
+      const tmp = document.createElement("canvas");
+      tmp.width = canvas.width;
+      tmp.height = canvas.height;
+      const tctx = tmp.getContext("2d")!;
+      tctx.save();
+      tctx.translate(tmp.width, 0);
+      tctx.scale(-1, 1);
+      // If JPG, we should fill background with black (default is transparent)
+      if (mime === "image/jpeg") {
+        tctx.fillStyle = "#000";
+        tctx.fillRect(0, 0, tmp.width, tmp.height);
+      }
+      tctx.drawImage(canvas, 0, 0);
+      tctx.restore();
 
-    return await new Promise((resolve) =>
-      tmp.toBlob((b) => resolve(b), "image/png"),
-    );
-  }, []);
+      return await new Promise((resolve) =>
+        tmp.toBlob((b) => resolve(b), mime, quality),
+      );
+    },
+    [],
+  );
 
   const copyToClipboard = useCallback(async () => {
     const blob = await exportBlobMirrored();
@@ -1624,38 +1761,57 @@ export default function App() {
   }, [exportBlobMirrored, speak]);
 
   const downloadPng = useCallback(async () => {
-    const blob = await exportBlobMirrored();
+    const blob = await exportBlobMirrored("image/png");
     if (!blob) return;
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `neon_export_${Date.now()}.png`;
+    a.download = `flux_export_${Date.now()}.png`;
     a.click();
     URL.revokeObjectURL(url);
-    speak("Exported.");
+    speak("PNG Exported.");
+  }, [exportBlobMirrored, speak]);
+
+  const downloadJpg = useCallback(async () => {
+    const blob = await exportBlobMirrored("image/jpeg", 0.92);
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `flux_export_${Date.now()}.jpg`;
+    a.click();
+    URL.revokeObjectURL(url);
+    speak("JPG Exported.");
   }, [exportBlobMirrored, speak]);
 
   const sharePng = useCallback(
-    async (target?: "whatsapp" | "instagram" | "tiktok" | "facebook" | "x") => {
+    async (
+      target?:
+        | "whatsapp"
+        | "instagram"
+        | "tiktok"
+        | "facebook"
+        | "telegram"
+        | "x",
+    ) => {
       const msg = "Check out my hand tracking art! Made with Flux Studio.";
       const nav = navigator as any;
 
-      // Native file sharing (Attach PNG)
+      // 1. Try Native File Sharing (Save and Call)
       if (navigator.share && navigator.canShare) {
         try {
-          const blob = await exportBlobMirrored();
+          const blob = await exportBlobMirrored("image/png");
           if (!blob) throw new Error("No blob generated");
-          const file = new File([blob], `flux_art_${Date.now()}.png`, {
-            type: "image/png",
-          });
+          const fileName = `flux_art_${Date.now()}.png`;
+          const file = new File([blob], fileName, { type: "image/png" });
 
           if (navigator.canShare({ files: [file] })) {
             await navigator.share({
               files: [file],
-              title: "Flux Studio",
+              title: "Flux Studio Art",
               text: msg,
             });
-            speak("Shared!");
+            speak("Success!");
             return;
           }
         } catch (err: any) {
@@ -1685,6 +1841,8 @@ export default function App() {
             url = "https://www.facebook.com/";
           } else if (target === "x") {
             url = `https://twitter.com/intent/tweet?text=${encodedMsg}`;
+          } else if (target === "telegram") {
+            url = `https://t.me/share/photo?text=${encodedMsg}`;
           }
 
           if (url) {
@@ -1892,7 +2050,7 @@ export default function App() {
       }
 
       // STRICT EXPORT COMMANDS
-      if (t.includes("export") || t.includes("share") || t.includes("send")) {
+      if (t.includes("export") || t.includes("share") || t.includes("send") || t.includes("share to") || t.includes("save to") || t.includes("export to")) {
         if (
           textMatches(t, [
             "whatsapp",
@@ -1923,6 +2081,12 @@ export default function App() {
           speak("Sharing to TikTok...");
           return void sharePng("tiktok");
         }
+        if (
+          textMatches(t, ["telegram", "telegramm", "tele gram", "tele gramm"])
+        ) {
+          speak("Sharing to Telegram...");
+          return void sharePng("telegram");
+        }
         if (textMatches(t, ["facebook", "fb"])) {
           speak("Sharing to Facebook...");
           return void sharePng("facebook");
@@ -1934,19 +2098,26 @@ export default function App() {
           return void sharePng("x");
         }
 
+        if (t.includes("png")) return void downloadPng();
+        if (t.includes("jpg") || t.includes("jpeg")) return void downloadJpg();
+        if (t.includes("svg") || t.includes("vector"))
+          return void handleSessionExport("svg");
         if (
-          t.includes("png") ||
+          t.includes("video") ||
+          t.includes("mp4") ||
+          t.includes("movie") ||
+          t.includes("animation") ||
+          t.includes("gif")
+        )
+          return void handleSessionExport("mp4");
+
+        if (
           t.includes("file") ||
           t.includes("download") ||
           t.includes("save") ||
           t.includes("image")
         )
           return void downloadPng();
-        if (t.includes("gif")) return void handleSessionExport("gif");
-        if (t.includes("video") || t.includes("mp4") || t.includes("movie"))
-          return void handleSessionExport("mp4");
-        if (t.includes("svg") || t.includes("vector"))
-          return void handleSessionExport("svg");
 
         return void sharePng(); // Default share
       }
@@ -2607,8 +2778,7 @@ export default function App() {
           tr.isPointing = true;
 
           if (settingsRef.current.eraserMode) {
-            // Eraser mode just activates, doesn't start a stroke
-            eraseStrokeAt(x.pointPt);
+            eraseStrokeAt(x.pointPt, det.scalePx);
           } else {
             const isAdmin = isAdminGroup(tr);
             const color = effectiveColorForHand(isAdmin);
@@ -2630,10 +2800,31 @@ export default function App() {
           }
         } else if (tr.isPointing && (!x.POINT_ACTIVE || tr.isPinching)) {
           tr.isPointing = false;
+          // [BAKE] When a stroke ends, bake it into the buffer canvas
+          if (tr.drawStrokeId) {
+            const buffer = bufferCanvasRef.current;
+            const s = strokesRef.current.find(
+              (st) => st.id === tr.drawStrokeId,
+            );
+            if (buffer && s) {
+              const bctx = buffer.getContext("2d")!;
+              const glow = settingsRef.current.glow;
+              for (let i = 1; i < s.points.length; i++) {
+                paintStrokeSegment(
+                  bctx,
+                  s.color,
+                  s.points[i - 1],
+                  s.points[i],
+                  glow,
+                );
+              }
+              bakedCountRef.current++;
+            }
+          }
           tr.drawStrokeId = "";
         } else if (tr.isPointing) {
           if (settingsRef.current.eraserMode) {
-            eraseStrokeAt(x.pointPt);
+            eraseStrokeAt(x.pointPt, det.scalePx);
           } else if (tr.drawStrokeId) {
             const adminS = adminScaleRef.current || det.scalePx;
             const handScale = clamp(
@@ -2686,9 +2877,18 @@ export default function App() {
             v.videoHeight,
             W,
             H,
-            isMobile() ? "cover" : "fill",
+            isMobile() ? "contain" : "fill",
           )
         : { scaleX: 1, scaleY: 1, offsetX: 0, offsetY: 0 };
+
+      const factorX = v ? v.videoWidth * map.scaleX : 1;
+      const factorY = v ? v.videoHeight * map.scaleY : 1;
+
+      // Optimized coord getter
+      const get = (idx: number, landmarks: any[]) => ({
+        x: landmarks[idx].x * factorX - map.offsetX,
+        y: landmarks[idx].y * factorY - map.offsetY,
+      });
 
       // AR Rendering
       if (
@@ -2698,16 +2898,10 @@ export default function App() {
       ) {
         const face = faceRes.faceLandmarks[0];
 
-        // Helper to get coords
-        const get = (idx: number) => ({
-          x: face[idx].x * v!.videoWidth * map.scaleX - map.offsetX,
-          y: face[idx].y * v!.videoHeight * map.scaleY - map.offsetY,
-        });
-
         // GLasses
         if (arItems.glasses) {
-          const eyeL = get(33); // Left eye corner
-          const eyeR = get(263); // Right eye corner
+          const eyeL = get(33, face); // Left eye corner
+          const eyeR = get(263, face); // Right eye corner
           const center = { x: (eyeL.x + eyeR.x) / 2, y: (eyeL.y + eyeR.y) / 2 };
           const size = dist(eyeL, eyeR) * 2.2;
 
@@ -2740,8 +2934,8 @@ export default function App() {
 
         // Hat
         if (arItems.hat) {
-          const forehead = get(10); // Top of head
-          const chin = get(152);
+          const forehead = get(10, face); // Top of head
+          const chin = get(152, face);
           const headHeight = dist(forehead, chin);
           const center = { x: forehead.x, y: forehead.y - headHeight * 0.3 };
           const size = headHeight * 1.5;
@@ -2779,10 +2973,10 @@ export default function App() {
 
         // Beard
         if (arItems.beard) {
-          const chin = get(152); // Tip of chin
-          const leftJaw = get(132); // Left jaw
-          const rightJaw = get(361); // Right jaw
-          const mouth = get(13); // Upper lip
+          const chin = get(152, face); // Tip of chin
+          const leftJaw = get(132, face); // Left jaw
+          const rightJaw = get(361, face); // Right jaw
+          const mouth = get(13, face); // Upper lip
 
           const center = {
             x: (leftJaw.x + rightJaw.x) / 2,
@@ -2827,10 +3021,10 @@ export default function App() {
 
         // Mustache
         if (arItems.mustache) {
-          const nose = get(4); // Tip of nose
-          const mouth = get(13); // Top of mouth
-          const leftMouth = get(61);
-          const rightMouth = get(291);
+          const nose = get(4, face); // Tip of nose
+          const mouth = get(13, face); // Top of mouth
+          const leftMouth = get(61, face);
+          const rightMouth = get(291, face);
 
           const center = {
             x: nose.x,
@@ -2920,11 +3114,28 @@ export default function App() {
             ? "rgba(255,204,102,0.4)"
             : "rgba(255,85,102,0.35)";
 
+        const isEraser = settingsRef.current.eraserMode && tr.isPointing;
+
         ctx.save();
-        ctx.fillStyle = color;
-        ctx.beginPath();
-        ctx.arc(tr.det.indexTip.x, tr.det.indexTip.y, 12, 0, Math.PI * 2);
-        ctx.fill();
+        if (isEraser) {
+          const handFactor = clamp(tr.det.scalePx / 100, 0.5, 2.0);
+          const r = 30 * handFactor;
+          ctx.setLineDash([5, 5]);
+          ctx.strokeStyle = "#ffffff";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(tr.det.indexTip.x, tr.det.indexTip.y, r, 0, Math.PI * 2);
+          ctx.stroke();
+
+          ctx.fillStyle = "rgba(255, 255, 255, 0.25)";
+          ctx.fill();
+        } else {
+          ctx.fillStyle = color;
+          ctx.beginPath();
+          ctx.arc(tr.det.indexTip.x, tr.det.indexTip.y, 12, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
 
         // Undo mirroring for text
         ctx.save();
@@ -3199,10 +3410,13 @@ export default function App() {
             mobileCached ? "contain" : "fill",
           );
 
-          // Helper for mapping
-          const mx = (n: number) => n * v.videoWidth * map.scaleX - map.offsetX;
-          const my = (n: number) =>
-            n * v.videoHeight * map.scaleY - map.offsetY;
+          // Reset point pool for this frame
+          nextPtIdxRef.current = 0;
+          const factorX = v.videoWidth * map.scaleX;
+          const factorY = v.videoHeight * map.scaleY;
+
+          const mx = (n: number) => n * factorX - map.offsetX;
+          const my = (n: number) => n * factorY - map.offsetY;
 
           for (let i = 0; i < landmarks.length; i++) {
             const hand = landmarks[i];
@@ -3214,61 +3428,57 @@ export default function App() {
               | "Right"
               | "Unknown";
 
-            const wrist = {
-              x: mx(hand[IDX.wrist].x),
-              y: my(hand[IDX.wrist].y),
-            };
-            const indexMcp = {
-              x: mx(hand[IDX.indexMcp].x),
-              y: my(hand[IDX.indexMcp].y),
-            };
-            const middleMcp = {
-              x: mx(hand[IDX.middleMcp].x),
-              y: my(hand[IDX.middleMcp].y),
-            };
+            const wrist = getPoolPt(
+              mx(hand[IDX.wrist].x),
+              my(hand[IDX.wrist].y),
+            );
+            const indexMcp = getPoolPt(
+              mx(hand[IDX.indexMcp].x),
+              my(hand[IDX.indexMcp].y),
+            );
+            const middleMcp = getPoolPt(
+              mx(hand[IDX.middleMcp].x),
+              my(hand[IDX.middleMcp].y),
+            );
+            const thumbTip = getPoolPt(
+              mx(hand[IDX.thumbTip].x),
+              my(hand[IDX.thumbTip].y),
+            );
+            const indexTip = getPoolPt(
+              mx(hand[IDX.indexTip].x),
+              my(hand[IDX.indexTip].y),
+            );
+            const indexPip = getPoolPt(
+              mx(hand[IDX.indexPip].x),
+              my(hand[IDX.indexPip].y),
+            );
+            const middleTip = getPoolPt(
+              mx(hand[IDX.middleTip].x),
+              my(hand[IDX.middleTip].y),
+            );
+            const middlePip = getPoolPt(
+              mx(hand[IDX.middlePip].x),
+              my(hand[IDX.middlePip].y),
+            );
+            const ringTip = getPoolPt(
+              mx(hand[IDX.ringTip].x),
+              my(hand[IDX.ringTip].y),
+            );
+            const ringPip = getPoolPt(
+              mx(hand[IDX.ringPip].x),
+              my(hand[IDX.ringPip].y),
+            );
+            const pinkyTip = getPoolPt(
+              mx(hand[IDX.pinkyTip].x),
+              my(hand[IDX.pinkyTip].y),
+            );
+            const pinkyPip = getPoolPt(
+              mx(hand[IDX.pinkyPip].x),
+              my(hand[IDX.pinkyPip].y),
+            );
 
-            const thumbTip = {
-              x: mx(hand[IDX.thumbTip].x),
-              y: my(hand[IDX.thumbTip].y),
-            };
-            const indexTip = {
-              x: mx(hand[IDX.indexTip].x),
-              y: my(hand[IDX.indexTip].y),
-            };
-            const indexPip = {
-              x: mx(hand[IDX.indexPip].x),
-              y: my(hand[IDX.indexPip].y),
-            };
-
-            const middleTip = {
-              x: mx(hand[IDX.middleTip].x),
-              y: my(hand[IDX.middleTip].y),
-            };
-            const middlePip = {
-              x: mx(hand[IDX.middlePip].x),
-              y: my(hand[IDX.middlePip].y),
-            };
-
-            const ringTip = {
-              x: mx(hand[IDX.ringTip].x),
-              y: my(hand[IDX.ringTip].y),
-            };
-            const ringPip = {
-              x: mx(hand[IDX.ringPip].x),
-              y: my(hand[IDX.ringPip].y),
-            };
-
-            const pinkyTip = {
-              x: mx(hand[IDX.pinkyTip].x),
-              y: my(hand[IDX.pinkyTip].y),
-            };
-            const pinkyPip = {
-              x: mx(hand[IDX.pinkyPip].x),
-              y: my(hand[IDX.pinkyPip].y),
-            };
-
-            const palm = {
-              x: mx(
+            const palm = getPoolPt(
+              mx(
                 (hand[IDX.wrist].x +
                   hand[IDX.indexMcp].x +
                   hand[IDX.middleMcp].x +
@@ -3276,7 +3486,7 @@ export default function App() {
                   hand[IDX.pinkyMcp].x) /
                   5,
               ),
-              y: my(
+              my(
                 (hand[IDX.wrist].y +
                   hand[IDX.indexMcp].y +
                   hand[IDX.middleMcp].y +
@@ -3284,7 +3494,7 @@ export default function App() {
                   hand[IDX.pinkyMcp].y) /
                   5,
               ),
-            };
+            );
 
             const scalePx = Math.max(60, dist(wrist, middleMcp));
             const pinchDist = dist(indexTip, thumbTip);
@@ -3295,42 +3505,35 @@ export default function App() {
               1,
             );
 
-            const rawLandmarks = hand; // ✅ keep normalized landmarks, no allocation
+            const rawLandmarks = hand;
 
             const gFull = gestureResults[i]?.[0];
             const gestureName = gFull?.categoryName ?? "None";
             const gestureScore = gFull?.score ?? 0;
 
-            const handIndex = i; // renamed for clarity
-            const base = {
-              handIndex,
-              handedness: handName,
-              wrist,
-              palm,
-              indexTip,
-              indexPip,
-              thumbTip,
-              indexMcp,
-              middleMcp,
-              middleTip,
-              ringTip,
-              pinkyTip,
-              middlePip,
-              ringPip,
-              pinkyPip,
-              scalePx,
-              pinchStrength,
-            } as Omit<
-              HandDet,
-              | "rawPoint"
-              | "rawPalm"
-              | "rawGrab"
-              | "rawLandmarks"
-              | "gesture"
-              | "gestureConfidence"
-            >;
+            // Reuse Det from pool
+            const dIdx = i % detPoolRef.current.length;
+            const det = detPoolRef.current[dIdx];
 
-            const g = computeGestureBooleans(base);
+            det.handIndex = i;
+            det.handedness = handName;
+            det.wrist = wrist;
+            det.palm = palm;
+            det.indexTip = indexTip;
+            det.indexPip = indexPip;
+            det.thumbTip = thumbTip;
+            det.indexMcp = indexMcp;
+            det.middleMcp = middleMcp;
+            det.middleTip = middleTip;
+            det.ringTip = ringTip;
+            det.pinkyTip = pinkyTip;
+            det.middlePip = middlePip;
+            det.ringPip = ringPip;
+            det.pinkyPip = pinkyPip;
+            det.scalePx = scalePx;
+            det.pinchStrength = pinchStrength;
+
+            const g = computeGestureBooleans(det);
 
             // Override manual booleans with robust MediaPipe gestures
             const isPointing = gestureName === "Pointing_Up";
@@ -3338,15 +3541,14 @@ export default function App() {
             const isGrab =
               gestureName === "Closed_Fist" || gestureName === "Thumb_Up";
 
-            dets.push({
-              ...base,
-              rawPoint: isPointing || g.rawPoint,
-              rawPalm: isPalm || g.rawPalm,
-              rawGrab: isGrab,
-              rawLandmarks,
-              gesture: gestureName,
-              gestureConfidence: gestureScore,
-            });
+            det.rawPoint = isPointing || g.rawPoint;
+            det.rawPalm = isPalm || g.rawPalm;
+            det.rawGrab = isGrab;
+            det.rawLandmarks = rawLandmarks;
+            det.gesture = gestureName;
+            det.gestureConfidence = gestureScore;
+
+            dets.push(det);
           }
 
           assignTracks(dets, now);
@@ -3402,6 +3604,40 @@ export default function App() {
       if (needsFullRedrawRef.current) {
         needsFullRedrawRef.current = false;
         fullRedraw();
+      } else {
+        // High-performance Composite
+        const canvas = drawRef.current;
+        const buffer = bufferCanvasRef.current;
+        if (canvas && buffer) {
+          const ctx = canvas.getContext("2d")!;
+          // Reset main canvas only (we keep the buffer intact)
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+          // 1. Draw the baked world (0-cost composite)
+          ctx.drawImage(buffer, 0, 0);
+
+          // 2. Draw active strokes (currently being drawn by hands)
+          const glow = settingsRef.current.glow;
+          const tracks = tracksRef.current;
+          for (const tr of tracks) {
+            if (tr.drawStrokeId) {
+              const s = strokesRef.current.find(
+                (st) => st.id === tr.drawStrokeId,
+              );
+              if (s) {
+                for (let i = 1; i < s.points.length; i++) {
+                  paintStrokeSegment(
+                    ctx,
+                    s.color,
+                    s.points[i - 1],
+                    s.points[i],
+                    glow,
+                  );
+                }
+              }
+            }
+          }
+        }
       }
 
       // Throttle overlay rendering to 60fps
@@ -3650,6 +3886,7 @@ export default function App() {
               settingsRef.current.eraserMode = nx;
               setEraserMode(nx);
               speak(nx ? "Eraser." : "Draw.");
+              if (nx) speak("Eraser mode.");
             }}
           >
             <Icons.Eraser />
@@ -3708,6 +3945,12 @@ export default function App() {
           </button>
           <button className="btn icon-only" onClick={() => void sharePng("x")}>
             <Icons.Twitter />
+          </button>
+          <button
+            className="btn icon-only"
+            onClick={() => void sharePng("telegram")}
+          >
+            <Icons.Telegram />
           </button>
           <button
             className="btn icon-only"
@@ -3827,20 +4070,44 @@ export default function App() {
           >
             Export & Share
           </div>
-          <div className="tool-grid" style={{ gridTemplateColumns: "1fr 1fr" }}>
+          <div
+            className="tool-grid"
+            style={{ gridTemplateColumns: "repeat(3, 1fr)" }}
+          >
             <button
               className="btn btn-primary"
               onClick={() => void downloadPng()}
-              style={{ gap: 6 }}
+              style={{ padding: "8px 4px", fontSize: 11 }}
             >
-              <Icons.Save /> Save PNG
+              <Icons.Save /> PNG
+            </button>
+            <button
+              className="btn btn-primary"
+              onClick={() => void downloadJpg()}
+              style={{ padding: "8px 4px", fontSize: 11 }}
+            >
+              <Icons.Save /> JPG
+            </button>
+            <button
+              className="btn btn-primary"
+              onClick={() => void handleSessionExport("svg")}
+              style={{ padding: "8px 4px", fontSize: 11 }}
+            >
+              <Icons.Save /> SVG
+            </button>
+            <button
+              className="btn btn-primary"
+              onClick={() => void handleSessionExport("mp4")}
+              style={{ padding: "8px 4px", fontSize: 11 }}
+            >
+              <Icons.Media /> Movie
             </button>
             <button
               className="btn btn-primary"
               onClick={() => void sharePng()}
-              style={{ gap: 6 }}
+              style={{ padding: "8px 4px", fontSize: 11, gridColumn: "span 2" }}
             >
-              <Icons.Share /> Share
+              <Icons.Share /> Send to Apps
             </button>
           </div>
           <div style={{ height: 12 }} />
@@ -3881,6 +4148,13 @@ export default function App() {
               onClick={() => void sharePng("tiktok")}
             >
               <Icons.TikTok />
+            </button>
+            <button
+              className="btn icon-only"
+              style={{ color: "#00F2EA" }}
+              onClick={() => void sharePng("telegram")}
+            >
+              <Icons.Telegram />
             </button>
           </div>
         </div>
@@ -4116,13 +4390,16 @@ export default function App() {
           The Canvas Wrapper is shared. But on Mobile it's absolute. On desktop it's in the grid.
       */}
       {/* Voice Status Indicator (Shared) */}
-      <div className="flux-status-container">
+      <div className="flux-status-container mobile-only">
         <div className={`flux-indicator ${isSpeaking ? "speaking" : ""}`} />
       </div>
 
       <div
         className={`canvas-wrapper ${tracksRef.current.length > 0 ? "visible" : ""}`}
       >
+        <div className="flux-status-container desktop-only">
+          <div className={`flux-indicator ${isSpeaking ? "speaking" : ""}`} />
+        </div>
         <video
           ref={videoRef}
           className={`video-layer ${facingMode === "user" ? "mirrored" : ""}`}
