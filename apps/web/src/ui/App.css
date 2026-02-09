@@ -62,95 +62,238 @@ body {
 
 @media (max-width: 600px) {
   .desktop-only {
-    display: none;
+    display: none !important;
   }
 
   .mobile-only {
-    display: flex;
+    display: flex !important;
   }
 
   .app-container {
     padding: 0;
-    gap: 0;
-    display: block;
-    position: relative;
+    margin: 0;
     width: 100vw;
     height: 100vh;
+    background: #000; /* Phone Frame Body */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
     overflow: hidden;
   }
 
+  /* 1) PHONE FRAME (Implicitly the screen, but we enforce boundaries) */
+
+  /* 2) GREEN STAGE (Center) */
   .canvas-wrapper {
-    position: absolute;
-    top: 50%;
-    left: 25px;
-    right: 25px;
-    transform: translateY(
-      -55%
-    ); /* Slightly above center to allow room for bottom UI */
-    margin: 0;
-    border-radius: 20px;
-    z-index: 1;
-    height: auto;
-  }
-
-  .left-panel {
-    display: block;
-    position: static;
-  }
-
-  .corner-tl,
-  .corner-bl,
-  .corner-br,
-  .corner-tr {
-    position: absolute;
+    position: relative;
+    width: 90vw;
+    aspect-ratio: 9/16;
+    max-height: 80vh;
+    margin: 0 auto;
+    border: 2px solid #69f0ae; /* Green Stage Border */
+    box-shadow: 0 0 20px rgba(105, 240, 174, 0.2);
+    border-radius: 4px;
     z-index: 10;
-    padding: 8px;
-    border-radius: 12px;
-    background: var(--panel);
+    background: #000;
+    overflow: hidden;
+    order: 2; /* Visual Order */
+    flex-shrink: 0;
   }
 
-  .corner-tl {
-    top: 15px;
-    left: 15px;
+  .canvas-wrapper.active {
+    border-color: #69f0ae;
+    box-shadow: 0 0 30px rgba(105, 240, 174, 0.4);
   }
+
+  /* 3) LEFT TOOLBAR */
+  .left-panel {
+    display: contents; /* flattened */
+  }
+
+  .card.corner-tl,
+  .card.corner-bl {
+    /* We repurpose these or create a new container in App.tsx? */
+    /* Actually better to use absolute positioning relative to phone frame */
+    /* But current HTML structure is: LeftPanel > Cards */
+    /* We need to break them out visually */
+  }
+
+  /* We need a specific "Left Toolbar" container. 
+     Since HTML structure is rigid, we'll use absolute positioning on the specific ID/Classes 
+     assuming they are identifiable. */
+
+  /* Repositioning the "Tools" card content */
+  .corner-tl {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 50px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    backdrop-filter: none;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .corner-tl .label-row,
+  .corner-tl .btn-danger {
+    display: none;
+  }
+
+  .corner-tl div[style*="grid"] {
+    display: flex !important;
+    flex-direction: column;
+    gap: 16px !important;
+  }
+
+  /* Specific buttons in left toolbar */
+  .corner-tl .btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: #111;
+    border: 1px solid #333;
+    padding: 0;
+  }
+
+  /* Eraser toggle (in corner-bl normally) -> moved to Left Toolbar visually? 
+     Or keep it bottom left? Layout says "Left Vertical Toolbar".
+     We might need to move Eraser into the same visual stack. 
+     For now, let's put corner-bl at the bottom of the left stack. 
+  */
+  .corner-bl {
+    position: absolute;
+    left: 10px;
+    top: calc(50% + 140px); /* Offset from top stack */
+    width: 50px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    z-index: 20;
+  }
+  .corner-bl div {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .corner-bl .btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    padding: 0;
+    font-size: 0; /* Hide text "Eraser Mode" */
+  }
+  .corner-bl .btn::after {
+    content: "E"; /* Fallback icon or SVG? SVG is inside. */
+    font-size: 14px;
+    color: #fff;
+  }
+
+  /* 4) RIGHT SOCIAL STACK */
+  /* corner-tr is usually "Camera Swap" and "Mic" */
+  /* We want Social Stack on Right. current HTML has social in "desktop-only" card.
+     Wait, the user said "Right Vertical Social Stack". 
+     The current `desktop-only` card with social icons is HIDDEN on mobile.
+     We must UN-HIDE it for mobile but styling it differently.
+  */
+
+  /* We need to target the social card. It doesn't have a unique class in `App.tsx` other than order. 
+     We might need to add a class in App.tsx first. 
+     BUT, if we can't edit App.tsx HTML structure easily for this, we might be stuck.
+     Actually I can modify App.tsx to add `className="social-stack mobile-visible"` etc.
+  */
+
+  /* 5) BOTTOM CONTROLS */
+  /* Swap Camera (bottom-left) & Save As (bottom-right) */
 
   .corner-tr {
-    top: 15px;
-    right: 15px;
+    /* Camera Swap & Mic are here. 
+       User wants: Bottom-Left = Swap Camera. 
+       Mic isn't specified but needed.
+       Save As (floppy) = Bottom-Right.
+    */
+    position: absolute;
+    bottom: 30px;
+    left: 20px;
+    top: auto;
+    right: auto;
+    width: auto;
+    background: transparent;
+    border: none;
+    padding: 0;
+    box-shadow: none;
+    z-index: 20;
+    display: flex;
+    gap: 20px;
   }
-
-  .corner-bl {
-    bottom: 110px;
-    left: 15px;
+  .corner-tr .btn {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: #222;
+    border: 1px solid #444;
   }
 
   .corner-br {
-    bottom: 110px;
-    right: 15px;
-  }
-
-  .nova-status-container {
+    /* Save As */
     position: absolute;
-    bottom: 40px;
-    left: 50%;
-    transform: translateX(-50%);
+    bottom: 30px;
+    right: 20px;
+    top: auto;
+    left: auto;
+    width: auto;
+    background: transparent;
+    border: none;
+    padding: 0;
+    box-shadow: none;
     z-index: 20;
   }
+  .corner-br .btn {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: #69f0ae;
+    color: #000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+  }
+  .corner-br .btn svg {
+    stroke: #000;
+  }
+  /* Hide "Share" usage in corner-br if it exists, only "Save/Export" is needed there? 
+     User said "Bottom-right: Save As".
+  */
 
-  .mobile-voice-hint {
+  /* 6) TENSOR INDICATOR */
+  .tensor-status-container {
     position: absolute;
-    bottom: 15px;
+    bottom: 10px;
     left: 50%;
     transform: translateX(-50%);
-    font-size: 10px;
-    color: var(--muted);
-    font-style: italic;
-    white-space: nowrap;
-    z-index: 20;
+    z-index: 30;
   }
-
-  .card {
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  .tensor-indicator {
+    width: 12px;
+    height: 12px;
+    background: #223;
+    border: 2px solid #334;
+    border-radius: 50%;
+    transition: all 0.2s;
+  }
+  .tensor-indicator.speaking {
+    background: #69f0ae;
+    box-shadow: 0 0 15px #69f0ae;
+    transform: scale(1.5);
   }
 }
 

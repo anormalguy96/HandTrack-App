@@ -19,7 +19,7 @@ class UserIdDetailsService implements UserDetailsService {
         if (userId == null) {
             throw new org.springframework.security.core.userdetails.UsernameNotFoundException("User id is null");
         }
-        var u = users.findById(java.util.UUID.fromString(userId))
+        var u = users.findById(java.util.Objects.requireNonNull(java.util.UUID.fromString(userId)))
                 .orElseThrow(() -> new org.springframework.security.core.userdetails.UsernameNotFoundException(
                         "User not found"));
         return User.withUsername(u.id.toString()).password(u.passwordHash).authorities("USER").build();

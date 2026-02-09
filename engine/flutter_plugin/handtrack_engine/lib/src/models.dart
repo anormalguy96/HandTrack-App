@@ -1,4 +1,4 @@
-part of handtrack_engine;
+part of '../handtrack_engine.dart';
 
 @immutable
 class HandtrackConfig {
@@ -10,7 +10,8 @@ class HandtrackConfig {
     this.targetFps = 30,
     this.preferFrontCamera = true,
     this.enablePreview = true,
-    this.androidDelegate = "CPU", // CPU | GPU (GPU optional depending on device)
+    this.androidDelegate =
+        "CPU", // CPU | GPU (GPU optional depending on device)
   });
 
   final int maxHands;
@@ -87,7 +88,8 @@ class Hand {
 
 @immutable
 class Landmark {
-  const Landmark({required this.x, required this.y, required this.z, required this.conf});
+  const Landmark(
+      {required this.x, required this.y, required this.z, required this.conf});
 
   /// normalized [0..1]
   final double x;

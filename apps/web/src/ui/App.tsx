@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { CSSProperties } from "react";
 import {
   FilesetResolver,
@@ -6,10 +12,9 @@ import {
   FaceLandmarker, // [NEW] Added for AR
   HandLandmarkerResult,
   GestureRecognizerResult,
-  FaceLandmarkerResult
+  FaceLandmarkerResult,
 } from "@mediapipe/tasks-vision";
 import "./App.css";
-
 
 type Pt = { x: number; y: number };
 type StrokePoint = { x: number; y: number; t: number; w: number };
@@ -36,12 +41,27 @@ const IDX = {
 
 // Hand connections (avoid DrawingUtils allocations & normalize mapping)
 const HAND_CONNECTIONS: Array<[number, number]> = [
-  [0,1],[1,2],[2,3],[3,4],
-  [0,5],[5,6],[6,7],[7,8],
-  [5,9],[9,10],[10,11],[11,12],
-  [9,13],[13,14],[14,15],[15,16],
-  [13,17],[17,18],[18,19],[19,20],
-  [0,17],
+  [0, 1],
+  [1, 2],
+  [2, 3],
+  [3, 4],
+  [0, 5],
+  [5, 6],
+  [6, 7],
+  [7, 8],
+  [5, 9],
+  [9, 10],
+  [10, 11],
+  [11, 12],
+  [9, 13],
+  [13, 14],
+  [14, 15],
+  [15, 16],
+  [13, 17],
+  [17, 18],
+  [18, 19],
+  [19, 20],
+  [0, 17],
 ];
 
 /* ------------------------------ utils ------------------------------ */
@@ -64,14 +84,22 @@ function expandBBox(bb: BBox, p: Pt) {
   bb.maxY = Math.max(bb.maxY, p.y);
 }
 function padBBox(bb: BBox, pad: number): BBox {
-  return { minX: bb.minX - pad, minY: bb.minY - pad, maxX: bb.maxX + pad, maxY: bb.maxY + pad };
+  return {
+    minX: bb.minX - pad,
+    minY: bb.minY - pad,
+    maxX: bb.maxX + pad,
+    maxY: bb.maxY + pad,
+  };
 }
 function bboxContains(bb: BBox, p: Pt) {
   return p.x >= bb.minX && p.x <= bb.maxX && p.y >= bb.minY && p.y <= bb.maxY;
 }
 function computeBBox(pts: { x: number; y: number }[]): BBox {
   if (!pts.length) return emptyBBox();
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  let minX = Infinity,
+    minY = Infinity,
+    maxX = -Infinity,
+    maxY = -Infinity;
   for (const p of pts) {
     minX = Math.min(minX, p.x);
     minY = Math.min(minY, p.y);
@@ -151,7 +179,11 @@ class OneEuro2D {
   private dx = new LowPass(1);
   private dy = new LowPass(1);
   private lastT = 0;
-  constructor(private minCutoff = 0.9, private beta = 0.02, private dCutoff = 1.0) { }
+  constructor(
+    private minCutoff = 0.9,
+    private beta = 0.02,
+    private dCutoff = 1.0,
+  ) {}
   set(minCutoff: number, beta: number) {
     this.minCutoff = minCutoff;
     this.beta = beta;
@@ -250,15 +282,34 @@ function getInferSize(preset: InferencePreset) {
 function isFingerExtended(wrist: Pt, tip: Pt, pip: Pt, margin: number) {
   return dist(wrist, tip) > dist(wrist, pip) + margin;
 }
-function computeGestureBooleans(det: Omit<HandDet, "rawPoint" | "rawPalm" | "rawGrab" | "rawLandmarks">): Pick<HandDet, "rawPoint" | "rawPalm"> {
+function computeGestureBooleans(
+  det: Omit<HandDet, "rawPoint" | "rawPalm" | "rawGrab" | "rawLandmarks">,
+): Pick<HandDet, "rawPoint" | "rawPalm"> {
   const margin = clamp(det.scalePx * 0.06, 6, 18);
-  const indexExt = isFingerExtended(det.wrist, det.indexTip, det.indexPip, margin);
-  const middleExt = isFingerExtended(det.wrist, det.middleTip, det.middlePip, margin);
+  const indexExt = isFingerExtended(
+    det.wrist,
+    det.indexTip,
+    det.indexPip,
+    margin,
+  );
+  const middleExt = isFingerExtended(
+    det.wrist,
+    det.middleTip,
+    det.middlePip,
+    margin,
+  );
   const ringExt = isFingerExtended(det.wrist, det.ringTip, det.ringPip, margin);
-  const pinkyExt = isFingerExtended(det.wrist, det.pinkyTip, det.pinkyPip, margin);
+  const pinkyExt = isFingerExtended(
+    det.wrist,
+    det.pinkyTip,
+    det.pinkyPip,
+    margin,
+  );
 
-  const rawPoint = indexExt && !middleExt && !ringExt && !pinkyExt && det.pinchStrength < 0.25;
-  const rawPalm = indexExt && middleExt && ringExt && pinkyExt && det.pinchStrength < 0.2;
+  const rawPoint =
+    indexExt && !middleExt && !ringExt && !pinkyExt && det.pinchStrength < 0.25;
+  const rawPalm =
+    indexExt && middleExt && ringExt && pinkyExt && det.pinchStrength < 0.2;
 
   return { rawPoint, rawPalm };
 }
@@ -289,21 +340,58 @@ function parseSpokenNumber(text: string): number | null {
   const w = text.toLowerCase().replace(/-/g, " ").split(/\s+/).filter(Boolean);
   if (!w.length) return null;
 
-  const ones: Record<string, number> = { zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9 };
-  const teens: Record<string, number> = { ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19 };
-  const tens: Record<string, number> = { twenty: 20, thirty: 30, forty: 40, fifty: 50, sixty: 60, seventy: 70, eighty: 80, ninety: 90 };
+  const ones: Record<string, number> = {
+    zero: 0,
+    one: 1,
+    two: 2,
+    three: 3,
+    four: 4,
+    five: 5,
+    six: 6,
+    seven: 7,
+    eight: 8,
+    nine: 9,
+  };
+  const teens: Record<string, number> = {
+    ten: 10,
+    eleven: 11,
+    twelve: 12,
+    thirteen: 13,
+    fourteen: 14,
+    fifteen: 15,
+    sixteen: 16,
+    seventeen: 17,
+    eighteen: 18,
+    nineteen: 19,
+  };
+  const tens: Record<string, number> = {
+    twenty: 20,
+    thirty: 30,
+    forty: 40,
+    fifty: 50,
+    sixty: 60,
+    seventy: 70,
+    eighty: 80,
+    ninety: 90,
+  };
 
   function parseIntPhrase(tokens: string[]) {
     let i = 0;
     let val = 0;
     while (i < tokens.length) {
       const t = tokens[i];
-      if (t in ones) { val += ones[t]; i++; }
-      else if (t in teens) { val += teens[t]; i++; }
-      else if (t in tens) {
+      if (t in ones) {
+        val += ones[t];
+        i++;
+      } else if (t in teens) {
+        val += teens[t];
+        i++;
+      } else if (t in tens) {
         val += tens[t];
-        if (i + 1 < tokens.length && tokens[i + 1] in ones) { val += ones[tokens[i + 1]]; i += 2; }
-        else i++;
+        if (i + 1 < tokens.length && tokens[i + 1] in ones) {
+          val += ones[tokens[i + 1]];
+          i += 2;
+        } else i++;
       } else if (t === "and") i++;
       else break;
     }
@@ -322,31 +410,326 @@ function parseSpokenNumber(text: string): number | null {
 
 /* ------------------------------- main component ------------------------------ */
 
-  const fontStack =
-    'Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"';
+const fontStack =
+  'Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"';
 
 // SVG Icons
 const Icons = {
-  Undo: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>,
-  Redo: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3L21 13"/></svg>,
-  Clear: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>,
-  Export: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>,
-  Share: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>,
-  Glow: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="M4.93 4.93l1.41 1.41"/><path d="M17.66 17.66l1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="M6.34 17.66l-1.41 1.41"/><path d="M19.07 4.93l-1.41 1.41"/></svg>,
-  Landmarks: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/><circle cx="5" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><path d="M5 12h14"/><path d="M12 5v14"/></svg>,
-  MicOn: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>,
-  MicOff: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>,
-  Circle: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/></svg>,
-  Square: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/></svg>,
-  Triangle: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>,
-  Heart: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>,
-  Star: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>,
-  Arrow: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>,
-  WhatsApp: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>,
-  Instagram: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg>,
-  Facebook: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>,
-  Twitter: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 3a10.9 10.9 0 0 1-3.14 1.53 4.48 4.48 0 0 0-7.86 3v1A10.66 10.66 0 0 1 3 4s-4 9 5 13a11.64 11.64 0 0 1-7 2c9 5 20 0 20-11.5a4.5 4.5 0 0 0-.08-.83A7.72 7.72 0 0 0 23 3z"/></svg>,
-  Cameraswitch: () => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 21l-4-4 4-4"/><path d="M3 17h18"/><path d="M17 3l4 4-4 4"/><path d="M21 7H3"/></svg>,
+  Undo: () => (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M3 7v6h6" />
+      <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13" />
+    </svg>
+  ),
+  Redo: () => (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M21 7v6h-6" />
+      <path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3L21 13" />
+    </svg>
+  ),
+  Clear: () => (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <polyline points="3 6 5 6 21 6" />
+      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+    </svg>
+  ),
+  Export: () => (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="7 10 12 15 17 10" />
+      <line x1="12" y1="15" x2="12" y2="3" />
+    </svg>
+  ),
+  Share: () => (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="18" cy="5" r="3" />
+      <circle cx="6" cy="12" r="3" />
+      <circle cx="18" cy="19" r="3" />
+      <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+      <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+    </svg>
+  ),
+  Glow: () => (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2" />
+      <path d="M12 20v2" />
+      <path d="M4.93 4.93l1.41 1.41" />
+      <path d="M17.66 17.66l1.41 1.41" />
+      <path d="M2 12h2" />
+      <path d="M20 12h2" />
+      <path d="M6.34 17.66l-1.41 1.41" />
+      <path d="M19.07 4.93l-1.41 1.41" />
+    </svg>
+  ),
+  Landmarks: () => (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="12" cy="5" r="1" />
+      <circle cx="12" cy="19" r="1" />
+      <circle cx="5" cy="12" r="1" />
+      <circle cx="19" cy="12" r="1" />
+      <path d="M5 12h14" />
+      <path d="M12 5v14" />
+    </svg>
+  ),
+  MicOn: () => (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+      <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+      <line x1="12" y1="19" x2="12" y2="23" />
+      <line x1="8" y1="23" x2="16" y2="23" />
+    </svg>
+  ),
+  MicOff: () => (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <line x1="1" y1="1" x2="23" y2="23" />
+      <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6" />
+      <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23" />
+      <line x1="12" y1="19" x2="12" y2="23" />
+      <line x1="8" y1="23" x2="16" y2="23" />
+    </svg>
+  ),
+  Circle: () => (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="12" cy="12" r="10" />
+    </svg>
+  ),
+  Square: () => (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+    </svg>
+  ),
+  Triangle: () => (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+    </svg>
+  ),
+  Heart: () => (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+    </svg>
+  ),
+  Star: () => (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+    </svg>
+  ),
+  Arrow: () => (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <line x1="12" y1="19" x2="12" y2="5" />
+      <polyline points="5 12 12 5 19 12" />
+    </svg>
+  ),
+  WhatsApp: () => (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+    </svg>
+  ),
+  Instagram: () => (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+      <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+      <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
+    </svg>
+  ),
+  Facebook: () => (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" />
+    </svg>
+  ),
+  Twitter: () => (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M23 3a10.9 10.9 0 0 1-3.14 1.53 4.48 4.48 0 0 0-7.86 3v1A10.66 10.66 0 0 1 3 4s-4 9 5 13a11.64 11.64 0 0 1-7 2c9 5 20 0 20-11.5a4.5 4.5 0 0 0-.08-.83A7.72 7.72 0 0 0 23 3z" />
+    </svg>
+  ),
+  Cameraswitch: () => (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M7 21l-4-4 4-4" />
+      <path d="M3 17h18" />
+      <path d="M17 3l4 4-4 4" />
+      <path d="M21 7H3" />
+    </svg>
+  ),
 };
 
 /* ------------------------------- Main Component --------------------------- */
@@ -360,8 +743,13 @@ export default function App() {
   /* -------------------------- MediaPipe landmarker ------------------------- */
   /* -------------------------- MediaPipe landmarker ------------------------- */
   const [landmarker, setLandmarker] = useState<GestureRecognizer | null>(null);
-  const [faceLandmarker, setFaceLandmarker] = useState<FaceLandmarker | null>(null); // [NEW] Ref for face
-  const [arItems, setArItems] = useState<{ hat: boolean; glasses: boolean }>({ hat: false, glasses: false }); // [NEW] AR State
+  const [faceLandmarker, setFaceLandmarker] = useState<FaceLandmarker | null>(
+    null,
+  ); // [NEW] Ref for face
+  const [arItems, setArItems] = useState<{ hat: boolean; glasses: boolean }>({
+    hat: false,
+    glasses: false,
+  }); // [NEW] AR State
 
   const theme = useMemo(
     () => ({
@@ -375,7 +763,7 @@ export default function App() {
       warn: "#ffcc66",
       danger: "#ff5566",
     }),
-    []
+    [],
   );
 
   /* --------------------------- core runtime refs --------------------------- */
@@ -398,6 +786,9 @@ export default function App() {
   const adminScaleRef = useRef<number>(0);
   const guestUnlockUntilRef = useRef<number>(0);
   const adminTolerance = 0.22;
+
+  // Export session tracking
+  const lastSavedStrokeIdRef = useRef<string | null>(null);
 
   // two-hand transform state
   const twoPinchRef = useRef({
@@ -431,7 +822,13 @@ export default function App() {
   /* ---------------------------------- HUD -------------------------------- */
   const [ready, setReady] = useState(false);
   const [loadingStep, setLoadingStep] = useState("Initializing…");
-  const [hud, setHud] = useState({ fps: 0, inferMs: 0, strokes: 0, hands: 0, guestUnlocked: false });
+  const [hud, setHud] = useState({
+    fps: 0,
+    inferMs: 0,
+    strokes: 0,
+    hands: 0,
+    guestUnlocked: false,
+  });
   const [showInstructions, setShowInstructions] = useState(false);
   const [initialOverlay, setInitialOverlay] = useState(true);
 
@@ -442,24 +839,32 @@ export default function App() {
     voiceOnRef.current = voiceOn;
   }, [voiceOn]);
   const [voiceHint, setVoiceHint] = useState(
-    'Try: "Nova change color to red", "Nova glow off", "Nova export".'
+    'Try: "Tensor change color to red", "Tensor glow off", "Tensor export".',
   );
   const [isSpeaking, setIsSpeaking] = useState(false);
-  
+
   // New UI States
   const [brushColor, setBrushColor] = useState(settingsRef.current.brushColor);
-  const [baseThickness, setBaseThickness] = useState(settingsRef.current.baseThickness);
+  const [baseThickness, setBaseThickness] = useState(
+    settingsRef.current.baseThickness,
+  );
   const [glow, setGlow] = useState(settingsRef.current.glow);
-  const [showLandmarks, setShowLandmarks] = useState(settingsRef.current.showLandmarks);
-  const [inferPreset, setInferPreset] = useState<InferencePreset>(settingsRef.current.inferPreset);
-  const [inferFpsCap, setInferFpsCap] = useState(settingsRef.current.inferFpsCap);
+  const [showLandmarks, setShowLandmarks] = useState(
+    settingsRef.current.showLandmarks,
+  );
+  const [inferPreset, setInferPreset] = useState<InferencePreset>(
+    settingsRef.current.inferPreset,
+  );
+  const [inferFpsCap, setInferFpsCap] = useState(
+    settingsRef.current.inferFpsCap,
+  );
   const [maxHands, setMaxHands] = useState(settingsRef.current.maxHands);
   const [eraserMode, setEraserMode] = useState(false); // Type 2 eraser UI state
   const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
   const [preferIntegrated, setPreferIntegrated] = useState(true);
-  const [videoAspect, setVideoAspect] = useState(16/9);
+  const [videoAspect, setVideoAspect] = useState(16 / 9);
 
   // Auto-hide initial overlay
   useEffect(() => {
@@ -494,10 +899,14 @@ export default function App() {
 
     (async () => {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+        });
         vadStreamRef.current = stream;
-        
-        const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+
+        const ctx = new (
+          window.AudioContext || (window as any).webkitAudioContext
+        )();
         vadContextRef.current = ctx;
 
         const source = ctx.createMediaStreamSource(stream);
@@ -514,12 +923,16 @@ export default function App() {
         window.clearInterval(vadIntervalRef.current);
         vadIntervalRef.current = window.setInterval(() => {
           // If already speaking, or TTS is active, or Rec is active, don't trigger
-          if (ttsGuardRef.current.speaking || ttsGuardRef.current.ignoreUntil > performance.now()) return;
-          
+          if (
+            ttsGuardRef.current.speaking ||
+            ttsGuardRef.current.ignoreUntil > performance.now()
+          )
+            return;
+
           // Check if recognition is already active (approximate check via internal state or if we know we started it)
           // We'll trust the browser to throw error or handle partial overlap, but best to avoid calling start() if active.
           // Since we can't easily peek into SpeechRecognition state property, we rely on the `onend` callback to re-arm.
-          
+
           analyser.getByteFrequencyData(dataArray);
           // Calculate average volume
           let sum = 0;
@@ -528,30 +941,29 @@ export default function App() {
 
           // Threshold (adjustable). 20-30 is usually good for background noise vs speech.
           if (avg > 25) {
-             const rec = speechRecRef.current;
-             if (rec) {
-                try {
-                   rec.start(); 
-                   // Pause VAD for a bit to let Rec take over? 
-                   // Actually, Rec will fire 'onstart' which we can track. 
-                   // But `start()` determines if it's active. 
-                   // If we call start() while active, it throws.
-                } catch (e: any) {
-                   // Ignore "already started" errors
-                }
-             }
+            const rec = speechRecRef.current;
+            if (rec) {
+              try {
+                rec.start();
+                // Pause VAD for a bit to let Rec take over?
+                // Actually, Rec will fire 'onstart' which we can track.
+                // But `start()` determines if it's active.
+                // If we call start() while active, it throws.
+              } catch (e: any) {
+                // Ignore "already started" errors
+              }
+            }
           }
         }, 100);
-
       } catch (e) {
         console.warn("[VAD] Failed to init mic for VAD:", e);
       }
     })();
 
     return () => {
-       window.clearInterval(vadIntervalRef.current);
-       vadStreamRef.current?.getTracks().forEach(t => t.stop());
-       vadContextRef.current?.close();
+      window.clearInterval(vadIntervalRef.current);
+      vadStreamRef.current?.getTracks().forEach((t) => t.stop());
+      vadContextRef.current?.close();
     };
   }, [voiceOn]);
 
@@ -562,7 +974,8 @@ export default function App() {
     const link = document.createElement("link");
     link.id = id;
     link.rel = "stylesheet";
-    link.href = "https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&display=swap";
+    link.href =
+      "https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&display=swap";
     document.head.appendChild(link);
     return () => link.remove();
   }, []);
@@ -577,7 +990,11 @@ export default function App() {
 
       // 2) Fallback: any non-Microsoft English voice
       if (!best) {
-        const nonMsEn = all.filter((v) => !/^microsoft/i.test(v.name) && v.lang?.toLowerCase().startsWith("en"));
+        const nonMsEn = all.filter(
+          (v) =>
+            !/^microsoft/i.test(v.name) &&
+            v.lang?.toLowerCase().startsWith("en"),
+        );
         best = nonMsEn[0];
       }
 
@@ -595,7 +1012,11 @@ export default function App() {
       if (!best) best = all[0];
 
       voiceRef.current = best;
-      console.log("[TTS] Selected voice:", voiceRef.current?.name, voiceRef.current?.lang);
+      console.log(
+        "[TTS] Selected voice:",
+        voiceRef.current?.name,
+        voiceRef.current?.lang,
+      );
     };
 
     pick();
@@ -668,7 +1089,13 @@ export default function App() {
 
   /* ------------------------------ stroke rendering ------------------------------ */
   const paintStrokeSegment = useCallback(
-    (ctx: CanvasRenderingContext2D, color: string, a: StrokePoint, b: StrokePoint, glow: boolean) => {
+    (
+      ctx: CanvasRenderingContext2D,
+      color: string,
+      a: StrokePoint,
+      b: StrokePoint,
+      glow: boolean,
+    ) => {
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
       ctx.strokeStyle = color;
@@ -689,7 +1116,7 @@ export default function App() {
       // reset only what matters
       ctx.shadowBlur = 0;
     },
-    []
+    [],
   );
 
   const fullRedraw = useCallback(() => {
@@ -709,15 +1136,23 @@ export default function App() {
     }
   }, [paintStrokeSegment]);
 
-  const startStroke = useCallback((color: string, p: Pt, t: number, thickness: number): string => {
-    redoRef.current = [];
-    const bb = emptyBBox();
-    expandBBox(bb, p);
-    const s: Stroke = { id: uid(), color, points: [{ x: p.x, y: p.y, t, w: thickness }], bbox: bb };
-    strokesRef.current.push(s);                // ✅ no spread
-    strokeByIdRef.current.set(s.id, s);        // ✅ fast lookup
-    return s.id;
-  }, []);
+  const startStroke = useCallback(
+    (color: string, p: Pt, t: number, thickness: number): string => {
+      redoRef.current = [];
+      const bb = emptyBBox();
+      expandBBox(bb, p);
+      const s: Stroke = {
+        id: uid(),
+        color,
+        points: [{ x: p.x, y: p.y, t, w: thickness }],
+        bbox: bb,
+      };
+      strokesRef.current.push(s); // ✅ no spread
+      strokeByIdRef.current.set(s.id, s); // ✅ fast lookup
+      return s.id;
+    },
+    [],
+  );
 
   const addStrokePoint = useCallback(
     (strokeId: string, p: Pt, t: number, thickness: number) => {
@@ -739,7 +1174,7 @@ export default function App() {
         paintStrokeSegment(ctx, s.color, a, b, glow);
       }
     },
-    [paintStrokeSegment]
+    [paintStrokeSegment],
   );
 
   /* -------------------------- history & clipboard ------------------------- */
@@ -814,8 +1249,13 @@ export default function App() {
       if (strokeHit) {
         changed = true;
         for (const seg of segments) {
-          if (seg.length > 1) { 
-             nextStrokes.push({ ...s, id: uid(), points: seg, bbox: computeBBox(seg) });
+          if (seg.length > 1) {
+            nextStrokes.push({
+              ...s,
+              id: uid(),
+              points: seg,
+              bbox: computeBBox(seg),
+            });
           }
         }
       } else {
@@ -825,7 +1265,7 @@ export default function App() {
 
     if (changed) {
       strokesRef.current = nextStrokes;
-      strokeByIdRef.current = new Map(nextStrokes.map(s => [s.id, s]));
+      strokeByIdRef.current = new Map(nextStrokes.map((s) => [s.id, s]));
       needsFullRedrawRef.current = true;
     }
   }, []);
@@ -853,27 +1293,36 @@ export default function App() {
     return bestD < pad ? bestId : "";
   }, []);
 
-  const translateStroke = useCallback((strokeId: string, dx: number, dy: number) => {
-    const s = strokeByIdRef.current.get(strokeId);
-    if (!s) return;
+  const translateStroke = useCallback(
+    (strokeId: string, dx: number, dy: number) => {
+      const s = strokeByIdRef.current.get(strokeId);
+      if (!s) return;
 
-    for (let i = 0; i < s.points.length; i++) {
-      s.points[i].x += dx;
-      s.points[i].y += dy;
-    }
-    s.bbox.minX += dx; s.bbox.maxX += dx;
-    s.bbox.minY += dy; s.bbox.maxY += dy;
+      for (let i = 0; i < s.points.length; i++) {
+        s.points[i].x += dx;
+        s.points[i].y += dy;
+      }
+      s.bbox.minX += dx;
+      s.bbox.maxX += dx;
+      s.bbox.minY += dy;
+      s.bbox.maxY += dy;
 
-    needsFullRedrawRef.current = true;
-  }, []);
+      needsFullRedrawRef.current = true;
+    },
+    [],
+  );
 
   const rotateStroke = useCallback((strokeId: string, dAng: number) => {
     const s = strokeByIdRef.current.get(strokeId);
     if (!s) return;
 
     // centroid without allocations
-    let sx = 0, sy = 0;
-    for (let i = 0; i < s.points.length; i++) { sx += s.points[i].x; sy += s.points[i].y; }
+    let sx = 0,
+      sy = 0;
+    for (let i = 0; i < s.points.length; i++) {
+      sx += s.points[i].x;
+      sy += s.points[i].y;
+    }
     const c = { x: sx / s.points.length, y: sy / s.points.length };
 
     const bb = emptyBBox();
@@ -899,8 +1348,12 @@ export default function App() {
 
     const kk = clamp(k, 0.25, 3.0);
 
-    let sx = 0, sy = 0;
-    for (let i = 0; i < s.points.length; i++) { sx += s.points[i].x; sy += s.points[i].y; }
+    let sx = 0,
+      sy = 0;
+    for (let i = 0; i < s.points.length; i++) {
+      sx += s.points[i].x;
+      sy += s.points[i].y;
+    }
     const c = { x: sx / s.points.length, y: sy / s.points.length };
 
     const bb = emptyBBox();
@@ -918,12 +1371,21 @@ export default function App() {
 
   /* ------------------------------ shapes ------------------------------ */
   const drawShapeAtCenter = useCallback(
-    (shape: "circle" | "square" | "triangle" | "heart" | "star" | "arrow", size: "small" | "medium" | "big", color: string) => {
+    (
+      shape: "circle" | "square" | "triangle" | "heart" | "star" | "arrow",
+      size: "small" | "medium" | "big",
+      color: string,
+    ) => {
       const canvas = drawRef.current;
       if (!canvas) return;
 
       const minDim = Math.min(canvas.width, canvas.height);
-      const r = size === "small" ? minDim * 0.11 : size === "medium" ? minDim * 0.17 : minDim * 0.24;
+      const r =
+        size === "small"
+          ? minDim * 0.11
+          : size === "medium"
+            ? minDim * 0.17
+            : minDim * 0.24;
       const c: Pt = { x: canvas.width / 2, y: canvas.height / 2 };
       const t0 = performance.now();
       const thick = settingsRef.current.baseThickness;
@@ -937,17 +1399,26 @@ export default function App() {
           add(c.x + Math.cos(a) * r, c.y + Math.sin(a) * r);
         }
       } else if (shape === "square") {
-        add(c.x - r, c.y - r); add(c.x + r, c.y - r);
-        add(c.x + r, c.y + r); add(c.x - r, c.y + r);
+        add(c.x - r, c.y - r);
+        add(c.x + r, c.y - r);
+        add(c.x + r, c.y + r);
+        add(c.x - r, c.y + r);
         add(c.x - r, c.y - r);
       } else if (shape === "triangle") {
-        add(c.x, c.y - r); add(c.x + r, c.y + r);
-        add(c.x - r, c.y + r); add(c.x, c.y - r);
+        add(c.x, c.y - r);
+        add(c.x + r, c.y + r);
+        add(c.x - r, c.y + r);
+        add(c.x, c.y - r);
       } else if (shape === "heart") {
         for (let i = 0; i <= 72; i++) {
           const t = (i / 72) * Math.PI * 2;
           const x = 16 * Math.pow(Math.sin(t), 3);
-          const y = -(13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t));
+          const y = -(
+            13 * Math.cos(t) -
+            5 * Math.cos(2 * t) -
+            2 * Math.cos(3 * t) -
+            Math.cos(4 * t)
+          );
           // Normalize scale a bit
           add(c.x + (x / 16) * r, c.y + (y / 16) * r);
         }
@@ -963,18 +1434,23 @@ export default function App() {
       } else if (shape === "arrow") {
         const w = r;
         const h = r * 0.6;
-        add(c.x - w, c.y); add(c.x + w * 0.5, c.y);
-        add(c.x + w * 0.5, c.y - h*0.5); add(c.x + w, c.y);
-        add(c.x + w * 0.5, c.y + h*0.5); add(c.x + w * 0.5, c.y);
+        add(c.x - w, c.y);
+        add(c.x + w * 0.5, c.y);
+        add(c.x + w * 0.5, c.y - h * 0.5);
+        add(c.x + w, c.y);
+        add(c.x + w * 0.5, c.y + h * 0.5);
+        add(c.x + w * 0.5, c.y);
         add(c.x - w, c.y);
       }
 
       if (pts.length) {
         const s: Stroke = {
           id: uid(),
-          points: pts.map(p => ({ x:p.x, y:p.y, t:t0, w:thick })),
+          points: pts.map((p) => ({ x: p.x, y: p.y, t: t0, w: thick })),
           color,
-          bbox: computeBBox(pts.map(p => ({ x:p.x, y:p.y, t:t0, w:thick }))),
+          bbox: computeBBox(
+            pts.map((p) => ({ x: p.x, y: p.y, t: t0, w: thick })),
+          ),
         };
         strokesRef.current.push(s);
         strokeByIdRef.current.set(s.id, s);
@@ -982,7 +1458,7 @@ export default function App() {
         speak(`${size} ${shape} drawn`);
       }
     },
-    [speak]
+    [speak],
   );
 
   /* ------------------------------ export helpers ------------------------------ */
@@ -1000,7 +1476,9 @@ export default function App() {
     tctx.drawImage(canvas, 0, 0);
     tctx.restore();
 
-    return await new Promise((resolve) => tmp.toBlob((b) => resolve(b), "image/png"));
+    return await new Promise((resolve) =>
+      tmp.toBlob((b) => resolve(b), "image/png"),
+    );
   }, []);
 
   const copyToClipboard = useCallback(async () => {
@@ -1029,43 +1507,223 @@ export default function App() {
     speak("Exported.");
   }, [exportBlobMirrored, speak]);
 
-  const sharePng = useCallback(async (target?: "whatsapp" | "instagram" | "tiktok" | "facebook" | "x") => {
-    const blob = await exportBlobMirrored();
-    if (!blob) return;
+  const sharePng = useCallback(
+    async (target?: "whatsapp" | "instagram" | "tiktok" | "facebook" | "x") => {
+      const blob = await exportBlobMirrored();
+      if (!blob) return;
 
-    if (target) {
-      await copyToClipboard();
-      setTimeout(() => {
-        let url = "";
-        if (target === "whatsapp") url = "https://wa.me/";
-        else if (target === "instagram") url = "https://www.instagram.com/";
-        else if (target === "tiktok") url = "https://www.tiktok.com/";
-        else if (target === "facebook") url = "https://www.facebook.com/";
-        else if (target === "x") url = "https://twitter.com/intent/tweet";
+      if (target) {
+        await copyToClipboard();
+        setTimeout(() => {
+          let url = "";
+          if (target === "whatsapp") url = "https://wa.me/";
+          else if (target === "instagram") url = "https://www.instagram.com/";
+          else if (target === "tiktok") url = "https://www.tiktok.com/";
+          else if (target === "facebook") url = "https://www.facebook.com/";
+          else if (target === "x") url = "https://twitter.com/intent/tweet";
 
-        if (url) window.open(url, "_blank");
-      }, 500);
-      return;
-    }
-
-    const file = new File([blob], `neon_export_${Date.now()}.png`, { type: "image/png" });
-    const nav = navigator as any;
-
-    try {
-      if (nav.canShare?.({ files: [file] }) && nav.share) {
-        await nav.share({ title: "Neon Studio", text: "Made with Neon Studio", files: [file] });
-        speak("Sharing...");
-      } else {
-        await downloadPng();
-        setVoiceHint("Native sharing unavailable; downloaded instead.");
+          if (url) window.open(url, "_blank");
+        }, 500);
+        return;
       }
-    } catch (e: any) {
-      if (e.name !== "AbortError") {
-        setVoiceHint("Share failed. Try Export PNG.");
-        await downloadPng();
+
+      const file = new File([blob], `neon_export_${Date.now()}.png`, {
+        type: "image/png",
+      });
+      const nav = navigator as any;
+
+      try {
+        if (nav.canShare?.({ files: [file] }) && nav.share) {
+          await nav.share({
+            title: "Neon Studio",
+            text: "Made with Neon Studio",
+            files: [file],
+          });
+          speak("Sharing...");
+        } else {
+          await downloadPng();
+          setVoiceHint("Native sharing unavailable; downloaded instead.");
+        }
+      } catch (e: any) {
+        if (e.name !== "AbortError") {
+          setVoiceHint("Share failed. Try Export PNG.");
+          await downloadPng();
+        }
       }
-    }
-  }, [copyToClipboard, downloadPng, exportBlobMirrored, speak]);
+    },
+    [copyToClipboard, downloadPng, exportBlobMirrored, speak],
+  );
+
+  /* ------------------------------ session export logic ------------------------------ */
+  const handleSessionExport = useCallback(
+    async (format: "gif" | "mp4" | "svg") => {
+      speak(`Generating ${format.toUpperCase()}...`);
+
+      // 1. Identify strokes to export (Session specific)
+      const allStrokes = strokesRef.current;
+      if (allStrokes.length === 0) {
+        speak("Nothing to save.");
+        return;
+      }
+
+      let startIndex = 0;
+      if (lastSavedStrokeIdRef.current) {
+        const idx = allStrokes.findIndex(
+          (s) => s.id === lastSavedStrokeIdRef.current,
+        );
+        if (idx !== -1) startIndex = idx + 1;
+      }
+
+      const sessionStrokes = allStrokes.slice(startIndex);
+      if (sessionStrokes.length === 0) {
+        speak("No new drawings since last save.");
+        return;
+      }
+
+      // 2. SVG Export (Vector)
+      if (format === "svg") {
+        const { width, height } = drawRef.current!;
+        const svgHeader = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg" style="background:transparent">`;
+        const svgFooter = "</svg>";
+        let paths = "";
+
+        for (const s of sessionStrokes) {
+          if (s.points.length < 2) continue;
+          const d = s.points
+            .map(
+              (p, i) =>
+                `${i === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`,
+            )
+            .join(" ");
+          // Note: color and width are simplified here
+          paths += `<path d="${d}" stroke="${s.color}" stroke-width="${s.points[0].w}" fill="none" stroke-linecap="round" stroke-linejoin="round" />`;
+        }
+
+        const blob = new Blob([svgHeader + paths + svgFooter], {
+          type: "image/svg+xml",
+        });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `neon_session_${Date.now()}.svg`;
+        a.click();
+        URL.revokeObjectURL(url);
+
+        lastSavedStrokeIdRef.current =
+          sessionStrokes[sessionStrokes.length - 1].id;
+        speak("SVG Saved.");
+        return;
+      }
+
+      // 3. GIF/MP4 via MediaRecorder (Replay)
+      // Since we don't have gif.js or ffmpeg.wasm installed, we fallback to WebM/MP4 recording of a replay.
+      // Ideally we would use a library for true GIF, but this meets the "Animation" requirement using available APIs.
+
+      const offCanvas = document.createElement("canvas");
+      offCanvas.width = drawRef.current!.width;
+      offCanvas.height = drawRef.current!.height;
+      const ctx = offCanvas.getContext("2d")!;
+
+      // Paint background if needed (transparent for now)
+
+      const stream = offCanvas.captureStream(30); // 30 FPS
+      const mime = MediaRecorder.isTypeSupported("video/mp4")
+        ? "video/mp4"
+        : "video/webm";
+      const recorder = new MediaRecorder(stream, {
+        mimeType: mime,
+        videoBitsPerSecond: 2500000,
+      });
+
+      const chunks: Blob[] = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunks.push(e.data);
+      };
+
+      recorder.onstop = () => {
+        const blob = new Blob(chunks, { type: mime });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `neon_session_${Date.now()}.${mime === "video/mp4" ? "mp4" : "webm"}`;
+        a.click();
+        URL.revokeObjectURL(url);
+        speak("Video saved.");
+      };
+
+      recorder.start();
+
+      // REPLAY LOOP
+      // We need to replay sessionStrokes over time.
+      // To keep it fast, we'll speed up the replay or use a fixed time per stroke if timestamps are long.
+      // Let's assume a "Review" speed (faster than real time).
+
+      let tStart = performance.now();
+
+      // Calculate total duration to normalize speed?
+      // Simple approach: Render frame by frame.
+
+      let strokeIdx = 0;
+      let pointIdx = 1;
+
+      const drawFrame = () => {
+        // Draw a batch of points to simulate speed
+        const BATCH = 3;
+
+        for (let b = 0; b < BATCH; b++) {
+          if (strokeIdx >= sessionStrokes.length) {
+            recorder.stop();
+            lastSavedStrokeIdRef.current =
+              sessionStrokes[sessionStrokes.length - 1].id;
+            return;
+          }
+
+          const s = sessionStrokes[strokeIdx];
+          if (pointIdx >= s.points.length) {
+            strokeIdx++;
+            pointIdx = 1;
+            continue;
+          }
+
+          // Draw s[pointIdx-1] to s[pointIdx]
+          const p1 = s.points[pointIdx - 1];
+          const p2 = s.points[pointIdx];
+
+          ctx.lineCap = "round";
+          ctx.lineJoin = "round";
+          ctx.strokeStyle = s.color;
+          ctx.lineWidth = p2.w;
+
+          // Simple glow simulation
+          if (settingsRef.current.glow) {
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = s.color;
+          } else {
+            ctx.shadowBlur = 0;
+          }
+
+          ctx.beginPath();
+          ctx.moveTo(p1.x, p1.y);
+          ctx.lineTo(p2.x, p2.y);
+          ctx.stroke();
+          ctx.shadowBlur = 0;
+
+          pointIdx++;
+        }
+
+        if (strokeIdx < sessionStrokes.length) {
+          requestAnimationFrame(drawFrame);
+        } else {
+          recorder.stop();
+          lastSavedStrokeIdRef.current =
+            sessionStrokes[sessionStrokes.length - 1].id;
+        }
+      };
+
+      requestAnimationFrame(drawFrame);
+    },
+    [speak],
+  );
 
   /* ------------------------------ voice commands ------------------------------ */
   const effectiveColorForHand = useCallback((isAdmin: boolean) => {
@@ -1073,64 +1731,104 @@ export default function App() {
     return settingsRef.current.brushColor;
   }, []);
 
-
   /* -------------------------------- voice -------------------------------- */
-  const textMatches = (text: string, phrases: string[]) => phrases.some(p => text.includes(p));
+  const textMatches = (text: string, phrases: string[]) =>
+    phrases.some((p) => text.includes(p));
 
   const handleVoiceCommand = useCallback(
     (text: string) => {
       const t = text.toLowerCase();
-      
-      if (!t.includes("nova")) {
-        console.log("[Voice] Ignored - no 'Nova' keyword:", t);
+
+      if (!t.includes("tensor")) {
+        console.log("[Voice] Ignored - no 'Tensor' keyword:", t);
         return;
       }
 
       // STRICT EXPORT COMMANDS
       if (t.includes("export") || t.includes("share") || t.includes("send")) {
         if (textMatches(t, ["whatsapp"])) return void sharePng("whatsapp");
-        if (textMatches(t, ["instagram", "insta"])) return void sharePng("instagram");
-        if (textMatches(t, ["tiktok", "tic toc"])) return void sharePng("tiktok");
-        if (textMatches(t, ["facebook", "fb"])) return void sharePng("facebook");
+        if (textMatches(t, ["instagram", "insta"]))
+          return void sharePng("instagram");
+        if (textMatches(t, ["tiktok", "tic toc"]))
+          return void sharePng("tiktok");
+        if (textMatches(t, ["facebook", "fb"]))
+          return void sharePng("facebook");
         if (textMatches(t, ["twitter", "x.com"])) return void sharePng("x");
-        
-        if (t.includes("png") || t.includes("file") || t.includes("download")) return void downloadPng();
+
+        if (
+          t.includes("png") ||
+          t.includes("file") ||
+          t.includes("download") ||
+          t.includes("image")
+        )
+          return void downloadPng();
+        if (t.includes("gif")) return void handleSessionExport("gif");
+        if (t.includes("video") || t.includes("mp4") || t.includes("movie"))
+          return void handleSessionExport("mp4");
+        if (t.includes("svg") || t.includes("vector"))
+          return void handleSessionExport("svg");
+
         return void sharePng(); // Default share
+      }
+
+      // CAMERA COMMANDS
+      if (t.includes("camera") || t.includes("cam") || t.includes("view")) {
+        if (
+          t.includes("swap") ||
+          t.includes("switch") ||
+          t.includes("flip") ||
+          t.includes("change")
+        ) {
+          setFacingMode((f: "user" | "environment") =>
+            f === "user" ? "environment" : "user",
+          );
+          speak("Swapping camera.");
+          return;
+        }
       }
 
       // ERASER MODES
       // Type 1: Remove specific item or selection
-      if (t.includes("remove") || t.includes("delete") || t.includes("erase") || t.includes("clear")) {
-        if (t.includes("all") || t.includes("canvas") || t.includes("everything")) {
-            clearAll();
-            return;
+      if (
+        t.includes("remove") ||
+        t.includes("delete") ||
+        t.includes("erase") ||
+        t.includes("clear")
+      ) {
+        if (
+          t.includes("all") ||
+          t.includes("canvas") ||
+          t.includes("everything")
+        ) {
+          clearAll();
+          return;
         }
-        
+
         // AR Items
         if (t.includes("hat")) {
-           setArItems(p => ({ ...p, hat: false }));
-           speak("Hat removed.");
-           return;
+          setArItems((p) => ({ ...p, hat: false }));
+          speak("Hat removed.");
+          return;
         }
         if (t.includes("glasses")) {
-           setArItems(p => ({ ...p, glasses: false }));
-           speak("Glasses removed.");
-           return;
+          setArItems((p) => ({ ...p, glasses: false }));
+          speak("Glasses removed.");
+          return;
         }
       }
 
       // AR Add Commands
       if (t.includes("add") || t.includes("wear") || t.includes("put on")) {
-         if (t.includes("hat")) {
-             setArItems(p => ({ ...p, hat: true }));
-             speak("Hat added.");
-             return;
-         }
-         if (t.includes("glasses") || t.includes("shades")) {
-             setArItems(p => ({ ...p, glasses: true }));
-             speak("Glasses added.");
-             return;
-         }
+        if (t.includes("hat")) {
+          setArItems((p) => ({ ...p, hat: true }));
+          speak("Hat added.");
+          return;
+        }
+        if (t.includes("glasses") || t.includes("shades")) {
+          setArItems((p) => ({ ...p, glasses: true }));
+          speak("Glasses added.");
+          return;
+        }
       }
 
       // Type 2: Eraser Mode (Partial)
@@ -1158,7 +1856,12 @@ export default function App() {
         else if (t.includes("arrow")) shape = "arrow";
 
         if (shape) {
-          const size = t.includes("big") || t.includes("large") ? "big" : t.includes("small") || t.includes("tiny") ? "small" : "medium";
+          const size =
+            t.includes("big") || t.includes("large")
+              ? "big"
+              : t.includes("small") || t.includes("tiny")
+                ? "small"
+                : "medium";
           drawShapeAtCenter(shape as any, size, settingsRef.current.brushColor);
           return;
         }
@@ -1166,14 +1869,24 @@ export default function App() {
 
       // Toggles
       if (t.includes("glow")) {
-        if (t.includes("on") || t.includes("enable")) { setGlow(true); speak("Glow on."); }
-        else if (t.includes("off") || t.includes("disable")) { setGlow(false); speak("Glow off."); }
+        if (t.includes("on") || t.includes("enable")) {
+          setGlow(true);
+          speak("Glow on.");
+        } else if (t.includes("off") || t.includes("disable")) {
+          setGlow(false);
+          speak("Glow off.");
+        }
         return;
       }
       if (t.includes("skeleton") || t.includes("landmarks")) {
-         if (t.includes("show") || t.includes("on")) { setShowLandmarks(true); speak("Skeleton visible."); }
-         else { setShowLandmarks(false); speak("Skeleton hidden."); }
-         return;
+        if (t.includes("show") || t.includes("on")) {
+          setShowLandmarks(true);
+          speak("Skeleton visible.");
+        } else {
+          setShowLandmarks(false);
+          speak("Skeleton hidden.");
+        }
+        return;
       }
 
       if (t.includes("undo")) return undo();
@@ -1182,23 +1895,32 @@ export default function App() {
 
       // Brush properties
       if (t.includes("color") || t.includes("set brush")) {
-         const c = parseCssColorCandidate(t.split(" ").pop() || "");
-         if (c && c !== t.split(" ").pop()) {
-            setBrushColor(c);
-            speak("Color set.");
-            return;
-         }
+        const c = parseCssColorCandidate(t.split(" ").pop() || "");
+        if (c && c !== t.split(" ").pop()) {
+          setBrushColor(c);
+          speak("Color set.");
+          return;
+        }
       }
 
       speak("Command not recognized.");
     },
-    [clearAll, drawShapeAtCenter, downloadPng, redo, speak, undo, copyToClipboard, sharePng]
+    [
+      clearAll,
+      drawShapeAtCenter,
+      downloadPng,
+      redo,
+      speak,
+      undo,
+      copyToClipboard,
+      sharePng,
+    ],
   );
 
   const resetVoice = useCallback(() => {
     try {
       speechRecRef.current?.abort();
-    } catch { }
+    } catch {}
     speechRecRef.current = null;
     setVoiceOn(false);
     setTimeout(() => setVoiceOn(true), 100);
@@ -1239,10 +1961,13 @@ export default function App() {
       }
 
       const ft = finalText.toLowerCase().trim();
-      const echo = guard.lastSpoken && (ft === guard.lastSpoken || ft.includes(guard.lastSpoken));
+      const echo =
+        guard.lastSpoken &&
+        (ft === guard.lastSpoken || ft.includes(guard.lastSpoken));
       if (echo) return;
 
-      if (ft && guard.lastCmd.text === ft && now - guard.lastCmd.at < 1800) return;
+      if (ft && guard.lastCmd.text === ft && now - guard.lastCmd.at < 1800)
+        return;
       if (ft) guard.lastCmd = { text: ft, at: now };
 
       if (interim) setVoiceHint(`Heard: "${interim}"`);
@@ -1264,7 +1989,8 @@ export default function App() {
 
     rec.onerror = (e: any) => {
       console.warn("[Voice] Error:", e.error);
-      if (e.error === "not-allowed") setVoiceHint("Mic blocked. Click Mic once to allow.");
+      if (e.error === "not-allowed")
+        setVoiceHint("Mic blocked. Click Mic once to allow.");
       else if (e.error !== "no-speech") setVoiceHint(`Voice error: ${e.error}`);
     };
     return rec;
@@ -1272,20 +1998,26 @@ export default function App() {
 
   /* ------------------------------ camera + model boot ------------------------------ */
   const isMobile = useCallback(() => {
-    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+      navigator.userAgent,
+    );
   }, []);
 
   const updateDevices = useCallback(async () => {
     try {
       const all = await navigator.mediaDevices.enumerateDevices();
-      const video = all.filter(d => d.kind === "videoinput");
+      const video = all.filter((d) => d.kind === "videoinput");
       setDevices(video);
-      
+
       if (preferIntegrated && video.length > 0) {
-        const integrated = video.find(d => 
-          /integrated|built-in|facetime|front/i.test(d.label)
+        // Priority: "user" facing, then "integrated"/"facetime", then simply the 0th index if it looks like a real cam
+        const userFacing = video.find((d) => /user|front/i.test(d.label));
+        const integrated = video.find((d) =>
+          /integrated|built-in|facetime/i.test(d.label),
         );
-        if (integrated) setSelectedDeviceId(integrated.deviceId);
+        const target = userFacing || integrated || video[0];
+
+        if (target) setSelectedDeviceId(target.deviceId);
       }
     } catch (e) {
       console.warn("Device enumeration failed:", e);
@@ -1295,7 +2027,6 @@ export default function App() {
   useEffect(() => {
     updateDevices();
   }, [preferIntegrated, updateDevices]);
-
 
   const startCamera = useCallback(async () => {
     const v = videoRef.current;
@@ -1308,18 +2039,18 @@ export default function App() {
       v.srcObject = null;
 
       console.log("[startCamera] Requesting getUserMedia...");
-      
+
       // [FIX] FOV Crop fix: Laptops use Landscape 16:9, Mobile uses Portrait 9:16
       const mobile = isMobile();
       const isPortraitWindow = window.innerHeight > window.innerWidth;
-      
+
       // On desktop/laptop, we almost always want landscape to avoid sensor cropping (FOV loss)
       // unless the user specifies otherwise or it's a very specific mobile-like tablet.
       const usePortrait = mobile && isPortraitWindow;
-      
+
       const idealW = usePortrait ? 720 : 1280;
       const idealH = usePortrait ? 1280 : 720;
-      
+
       const constraints: MediaStreamConstraints = {
         video: {
           width: { ideal: idealW },
@@ -1329,7 +2060,9 @@ export default function App() {
       };
 
       if (selectedDeviceId) {
-        (constraints.video as MediaTrackConstraints).deviceId = { exact: selectedDeviceId };
+        (constraints.video as MediaTrackConstraints).deviceId = {
+          exact: selectedDeviceId,
+        };
       } else {
         (constraints.video as MediaTrackConstraints).facingMode = facingMode;
       }
@@ -1341,7 +2074,7 @@ export default function App() {
       v.srcObject = stream;
 
       console.log("[startCamera] Waiting for loadedmetadata or readyState...");
-      
+
       if (v.readyState < 1) {
         await new Promise<void>((resolve) => {
           const timeout = setTimeout(() => {
@@ -1401,9 +2134,18 @@ export default function App() {
           lastSeenMs: nowMs,
           det,
 
-          pointFilter: new OneEuro2D(settingsRef.current.oneEuroMinCutoff, settingsRef.current.oneEuroBeta),
-          pinchFilter: new OneEuro2D(settingsRef.current.oneEuroMinCutoff, settingsRef.current.oneEuroBeta),
-          palmFilter: new OneEuro2D(settingsRef.current.oneEuroMinCutoff, settingsRef.current.oneEuroBeta),
+          pointFilter: new OneEuro2D(
+            settingsRef.current.oneEuroMinCutoff,
+            settingsRef.current.oneEuroBeta,
+          ),
+          pinchFilter: new OneEuro2D(
+            settingsRef.current.oneEuroMinCutoff,
+            settingsRef.current.oneEuroBeta,
+          ),
+          palmFilter: new OneEuro2D(
+            settingsRef.current.oneEuroMinCutoff,
+            settingsRef.current.oneEuroBeta,
+          ),
 
           stablePoint: 0,
           stablePalm: 0,
@@ -1425,14 +2167,21 @@ export default function App() {
     }
 
     const ttl = 700;
-    const survivors = prev.filter((tr) => nowMs - tr.lastSeenMs < ttl && !used.has(tr.id));
-    tracksRef.current = [...next, ...survivors].slice(0, settingsRef.current.maxHands);
+    const survivors = prev.filter(
+      (tr) => nowMs - tr.lastSeenMs < ttl && !used.has(tr.id),
+    );
+    tracksRef.current = [...next, ...survivors].slice(
+      0,
+      settingsRef.current.maxHands,
+    );
   }, []);
 
   const updateAdminScaleFromTracks = useCallback(() => {
     const tracks = tracksRef.current;
     if (!tracks.length) return;
-    const best = tracks.reduce((a, b) => (b.det.scalePx > a.det.scalePx ? b : a));
+    const best = tracks.reduce((a, b) =>
+      b.det.scalePx > a.det.scalePx ? b : a,
+    );
     const target = best.det.scalePx;
     if (!adminScaleRef.current) adminScaleRef.current = target;
     adminScaleRef.current = adminScaleRef.current * 0.85 + target * 0.15;
@@ -1444,8 +2193,14 @@ export default function App() {
     return rel <= adminTolerance;
   }, []);
 
-  const guestsUnlocked = useCallback(() => Date.now() < guestUnlockUntilRef.current, []);
-  const isAllowedToControl = useCallback((tr: Track) => isAdminGroup(tr) || guestsUnlocked(), [guestsUnlocked, isAdminGroup]);
+  const guestsUnlocked = useCallback(
+    () => Date.now() < guestUnlockUntilRef.current,
+    [],
+  );
+  const isAllowedToControl = useCallback(
+    (tr: Track) => isAdminGroup(tr) || guestsUnlocked(),
+    [guestsUnlocked, isAdminGroup],
+  );
 
   const maybeUnlockGuestsByAdminBlackStrokeStart = useCallback(
     (tr: Track, color: string) => {
@@ -1454,7 +2209,7 @@ export default function App() {
         speak("Guests unlocked for thirty seconds. Guests draw in black.");
       }
     },
-    [isAdminGroup, speak]
+    [isAdminGroup, speak],
   );
 
   /* ------------------------------ interactions ------------------------------ */
@@ -1466,15 +2221,28 @@ export default function App() {
       const tracks = tracksRef.current;
 
       const act = tracks.map((tr) => {
-        tr.pointFilter.set(settingsRef.current.oneEuroMinCutoff, settingsRef.current.oneEuroBeta);
-        tr.pinchFilter.set(settingsRef.current.oneEuroMinCutoff, settingsRef.current.oneEuroBeta);
-        tr.palmFilter.set(settingsRef.current.oneEuroMinCutoff, settingsRef.current.oneEuroBeta);
+        tr.pointFilter.set(
+          settingsRef.current.oneEuroMinCutoff,
+          settingsRef.current.oneEuroBeta,
+        );
+        tr.pinchFilter.set(
+          settingsRef.current.oneEuroMinCutoff,
+          settingsRef.current.oneEuroBeta,
+        );
+        tr.palmFilter.set(
+          settingsRef.current.oneEuroMinCutoff,
+          settingsRef.current.oneEuroBeta,
+        );
 
         const det = tr.det;
         const allowed = isAllowedToControl(tr);
 
-        tr.stablePoint = det.rawPoint ? Math.min(6, tr.stablePoint + 1) : Math.max(0, tr.stablePoint - 1);
-        tr.stablePalm = det.rawPalm ? Math.min(6, tr.stablePalm + 1) : Math.max(0, tr.stablePalm - 1);
+        tr.stablePoint = det.rawPoint
+          ? Math.min(6, tr.stablePoint + 1)
+          : Math.max(0, tr.stablePoint - 1);
+        tr.stablePalm = det.rawPalm
+          ? Math.min(6, tr.stablePalm + 1)
+          : Math.max(0, tr.stablePalm - 1);
 
         const POINT_ACTIVE = tr.stablePoint >= 3;
         const PALM_ACTIVE = tr.stablePalm >= 3;
@@ -1484,14 +2252,32 @@ export default function App() {
 
         const pointPt = tr.pointFilter.filter(det.indexTip, nowMs);
         const pinchPt = tr.pinchFilter.filter(
-          { x: (det.indexTip.x + det.thumbTip.x) / 2, y: (det.indexTip.y + det.thumbTip.y) / 2 },
-          nowMs
+          {
+            x: (det.indexTip.x + det.thumbTip.x) / 2,
+            y: (det.indexTip.y + det.thumbTip.y) / 2,
+          },
+          nowMs,
         );
         const palmPt = tr.palmFilter.filter(det.palm, nowMs);
 
-        const pinchAng = Math.atan2(det.indexTip.y - det.thumbTip.y, det.indexTip.x - det.thumbTip.x);
+        const pinchAng = Math.atan2(
+          det.indexTip.y - det.thumbTip.y,
+          det.indexTip.x - det.thumbTip.x,
+        );
 
-        return { tr, det, allowed, POINT_ACTIVE, PALM_ACTIVE, pinchOn, pinchOff, pointPt, pinchPt, palmPt, pinchAng };
+        return {
+          tr,
+          det,
+          allowed,
+          POINT_ACTIVE,
+          PALM_ACTIVE,
+          pinchOn,
+          pinchOff,
+          pointPt,
+          pinchPt,
+          palmPt,
+          pinchAng,
+        };
       });
 
       for (const x of act) {
@@ -1538,9 +2324,16 @@ export default function App() {
           tp.active = true;
 
           const sameSelected =
-            a.tr.selectedStrokeId && a.tr.selectedStrokeId === b.tr.selectedStrokeId ? a.tr.selectedStrokeId : "";
+            a.tr.selectedStrokeId &&
+            a.tr.selectedStrokeId === b.tr.selectedStrokeId
+              ? a.tr.selectedStrokeId
+              : "";
 
-          tp.strokeId = sameSelected || pickStroke(mid) || strokesRef.current.at(-1)?.id || "";
+          tp.strokeId =
+            sameSelected ||
+            pickStroke(mid) ||
+            strokesRef.current.at(-1)?.id ||
+            "";
           tp.baseDist = d;
           tp.baseAng = ang;
           tp.lastK = 1;
@@ -1550,7 +2343,8 @@ export default function App() {
           const dx = mid.x - tp.lastMid.x;
           const dy = mid.y - tp.lastMid.y;
           tp.lastMid = mid;
-          if (Math.abs(dx) + Math.abs(dy) > 0.2) translateStroke(tp.strokeId, dx, dy);
+          if (Math.abs(dx) + Math.abs(dy) > 0.2)
+            translateStroke(tp.strokeId, dx, dy);
 
           const k = clamp(d / Math.max(10, tp.baseDist), 0.35, 3.0);
           const relK = k / Math.max(1e-6, tp.lastK);
@@ -1582,7 +2376,10 @@ export default function App() {
         } else if (tr.isOpenPalm && !x.PALM_ACTIVE) {
           tr.isOpenPalm = false;
         } else if (tr.isOpenPalm && tr.selectedStrokeId) {
-          const ang = Math.atan2(det.indexMcp.y - det.wrist.y, det.indexMcp.x - det.wrist.x);
+          const ang = Math.atan2(
+            det.indexMcp.y - det.wrist.y,
+            det.indexMcp.x - det.wrist.x,
+          );
           const prev = tr.lastPinchAng;
           tr.lastPinchAng = ang;
           if (prev !== 0) {
@@ -1595,32 +2392,46 @@ export default function App() {
           const dx = x.pinchPt.x - tr.lastPinchPt.x;
           const dy = x.pinchPt.y - tr.lastPinchPt.y;
           tr.lastPinchPt = x.pinchPt;
-          if (Math.abs(dx) + Math.abs(dy) > 0.2) translateStroke(tr.selectedStrokeId, dx, dy);
+          if (Math.abs(dx) + Math.abs(dy) > 0.2)
+            translateStroke(tr.selectedStrokeId, dx, dy);
 
           const dAng = normAngleDelta(x.pinchAng - tr.pinchStartAng);
           const relAng = normAngleDelta(dAng - tr.lastPinchAng);
           tr.lastPinchAng = dAng;
-          if (Math.abs(relAng) > 0.012) rotateStroke(tr.selectedStrokeId, relAng);
+          if (Math.abs(relAng) > 0.012)
+            rotateStroke(tr.selectedStrokeId, relAng);
 
-          const rel = clamp(det.scalePx / Math.max(1, tr.pinchStartScalePx), 0.92, 1.08);
+          const rel = clamp(
+            det.scalePx / Math.max(1, tr.pinchStartScalePx),
+            0.92,
+            1.08,
+          );
           tr.pinchStartScalePx = det.scalePx;
           if (Math.abs(rel - 1) > 0.01) scaleStroke(tr.selectedStrokeId, rel);
         }
 
         if (!tr.isPointing && x.POINT_ACTIVE && !tr.isPinching) {
           tr.isPointing = true;
-          
+
           if (settingsRef.current.eraserMode) {
-             // Eraser mode just activates, doesn't start a stroke
-             eraseStrokeAt(x.pointPt);
+            // Eraser mode just activates, doesn't start a stroke
+            eraseStrokeAt(x.pointPt);
           } else {
             const isAdmin = isAdminGroup(tr);
             const color = effectiveColorForHand(isAdmin);
             maybeUnlockGuestsByAdminBlackStrokeStart(tr, color);
 
             const adminS = adminScaleRef.current || det.scalePx;
-            const handScale = clamp(det.scalePx / Math.max(1, adminS), 0.8, 1.35);
-            const thickness = clamp(settingsRef.current.baseThickness * handScale, 1, 40);
+            const handScale = clamp(
+              det.scalePx / Math.max(1, adminS),
+              0.8,
+              1.35,
+            );
+            const thickness = clamp(
+              settingsRef.current.baseThickness * handScale,
+              1,
+              40,
+            );
 
             tr.drawStrokeId = startStroke(color, x.pointPt, nowMs, thickness);
           }
@@ -1632,8 +2443,17 @@ export default function App() {
             eraseStrokeAt(x.pointPt);
           } else if (tr.drawStrokeId) {
             const adminS = adminScaleRef.current || det.scalePx;
-            const handScale = clamp(det.scalePx / Math.max(1, adminS), 0.8, 1.35);
-            const thickness = clamp(settingsRef.current.baseThickness * handScale + det.pinchStrength * 2.2, 1, 40);
+            const handScale = clamp(
+              det.scalePx / Math.max(1, adminS),
+              0.8,
+              1.35,
+            );
+            const thickness = clamp(
+              settingsRef.current.baseThickness * handScale +
+                det.pinchStrength * 2.2,
+              1,
+              40,
+            );
             addStrokePoint(tr.drawStrokeId, x.pointPt, nowMs, thickness);
           }
         }
@@ -1650,63 +2470,71 @@ export default function App() {
       scaleStroke,
       startStroke,
       translateStroke,
-    ]
+    ],
   );
 
   /* ------------------------------ overlay render ------------------------------ */
-  const renderOverlay = useCallback((faceRes?: FaceLandmarkerResult | null) => {
-    const ov = overlayRef.current;
-    const canvas = drawRef.current;
-    if (!ov || !canvas) return;
+  const renderOverlay = useCallback(
+    (faceRes?: FaceLandmarkerResult | null) => {
+      const ov = overlayRef.current;
+      const canvas = drawRef.current;
+      if (!ov || !canvas) return;
 
-    const ctx = ov.getContext("2d")!;
-    ctx.clearRect(0, 0, ov.width, ov.height);
-    
-    // AR Rendering
-    if (faceRes && faceRes.faceLandmarks && faceRes.faceLandmarks.length > 0) {
-       const face = faceRes.faceLandmarks[0];
-       const W = ov.width;
-       const H = ov.height;
-       
-       // Helper to get coords
-       const get = (idx: number) => ({ x: face[idx].x * W, y: face[idx].y * H });
+      const ctx = ov.getContext("2d")!;
+      ctx.clearRect(0, 0, ov.width, ov.height);
 
-       // GLasses
-       if (arItems.glasses) {
+      // AR Rendering
+      if (
+        faceRes &&
+        faceRes.faceLandmarks &&
+        faceRes.faceLandmarks.length > 0
+      ) {
+        const face = faceRes.faceLandmarks[0];
+        const W = ov.width;
+        const H = ov.height;
+
+        // Helper to get coords
+        const get = (idx: number) => ({
+          x: face[idx].x * W,
+          y: face[idx].y * H,
+        });
+
+        // GLasses
+        if (arItems.glasses) {
           const eyeL = get(33); // Left eye corner
           const eyeR = get(263); // Right eye corner
           const center = { x: (eyeL.x + eyeR.x) / 2, y: (eyeL.y + eyeR.y) / 2 };
           const size = dist(eyeL, eyeR) * 2.2;
-          
+
           ctx.save();
           ctx.translate(center.x, center.y);
           // Simple rotation based on eyes
           const angle = Math.atan2(eyeR.y - eyeL.y, eyeR.x - eyeL.x);
           ctx.rotate(angle);
-          
+
           // Draw Glasses (Neon Style)
           ctx.beginPath();
           ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
           ctx.strokeStyle = theme.accent;
           ctx.lineWidth = 4;
-          
+
           // Lenses
-          ctx.rect(-size/2, -size/5, size/2.2, size/2.5);
-          ctx.rect(size/22, -size/5, size/2.2, size/2.5);
+          ctx.rect(-size / 2, -size / 5, size / 2.2, size / 2.5);
+          ctx.rect(size / 22, -size / 5, size / 2.2, size / 2.5);
           ctx.fill();
           ctx.stroke();
-          
+
           // Bridge
           ctx.beginPath();
-          ctx.moveTo(-size/25, -size/5);
-          ctx.lineTo(size/25, -size/5);
+          ctx.moveTo(-size / 25, -size / 5);
+          ctx.lineTo(size / 25, -size / 5);
           ctx.stroke();
-          
-          ctx.restore();
-       }
 
-       // Hat
-       if (arItems.hat) {
+          ctx.restore();
+        }
+
+        // Hat
+        if (arItems.hat) {
           const forehead = get(10); // Top of head
           const chin = get(152);
           const headHeight = dist(forehead, chin);
@@ -1716,124 +2544,161 @@ export default function App() {
           ctx.save();
           ctx.translate(center.x, center.y);
           // Angle from chin to forehead
-          const angle = Math.atan2(forehead.y - chin.y, forehead.x - chin.x) + Math.PI / 2;
+          const angle =
+            Math.atan2(forehead.y - chin.y, forehead.x - chin.x) + Math.PI / 2;
           ctx.rotate(angle);
 
           // Draw Cyber Hat
           ctx.fillStyle = theme.accent;
           ctx.strokeStyle = "#fff";
           ctx.lineWidth = 3;
-          
+
           ctx.beginPath();
-          ctx.moveTo(-size/2, 0); // Brim L
-          ctx.lineTo(size/2, 0); // Brim R
-          ctx.lineTo(size/3, -size/2); // Top R
-          ctx.lineTo(-size/3, -size/2); // Top L
+          ctx.moveTo(-size / 2, 0); // Brim L
+          ctx.lineTo(size / 2, 0); // Brim R
+          ctx.lineTo(size / 3, -size / 2); // Top R
+          ctx.lineTo(-size / 3, -size / 2); // Top L
           ctx.closePath();
           ctx.fill();
           ctx.stroke();
-          
+
           // Neon Glow line
           ctx.beginPath();
           ctx.strokeStyle = "#0ff";
-          ctx.moveTo(-size/3, -size/4);
-          ctx.lineTo(size/3, -size/4);
+          ctx.moveTo(-size / 3, -size / 4);
+          ctx.lineTo(size / 3, -size / 4);
           ctx.stroke();
 
           ctx.restore();
-       }
-    }
-
-    // Drawing skeleton if enabled
-    const tracks = tracksRef.current;
-    if (settingsRef.current.showLandmarks) {
-      for (const tr of tracks) {
-        const lms = tr.det.rawLandmarks;
-        if (!lms?.length) continue;
-
-        const admin = isAdminGroup(tr);
-        ctx.strokeStyle = admin ? "#69f0ae" : "#ffffff";
-        ctx.lineWidth = 2;
-        ctx.globalAlpha = 0.65;
-
-        // connectors
-        for (let i = 0; i < HAND_CONNECTIONS.length; i++) {
-          const [a, b] = HAND_CONNECTIONS[i];
-          const p1 = lms[a], p2 = lms[b];
-          if (!p1 || !p2) continue;
-          ctx.beginPath();
-          ctx.moveTo(p1.x * ov.width, p1.y * ov.height);
-          ctx.lineTo(p2.x * ov.width, p2.y * ov.height);
-          ctx.stroke();
         }
-
-        // landmarks (small dots)
-        ctx.fillStyle = admin ? "#69f0ae" : "#ffffff";
-        for (let i = 0; i < lms.length; i++) {
-          const p = lms[i];
-          ctx.beginPath();
-          ctx.arc(p.x * ov.width, p.y * ov.height, 3, 0, Math.PI * 2);
-          ctx.fill();
-        }
-
-        ctx.globalAlpha = 1;
       }
-    }
 
-    for (const tr of tracks) {
-      const allowed = isAllowedToControl(tr);
-      const admin = isAdminGroup(tr);
-      const color = admin ? "rgba(105,240,174,0.45)" : allowed ? "rgba(255,204,102,0.4)" : "rgba(255,85,102,0.35)";
+      // Drawing skeleton if enabled
+      const tracks = tracksRef.current;
+      if (settingsRef.current.showLandmarks) {
+        for (const tr of tracks) {
+          const lms = tr.det.rawLandmarks;
+          if (!lms?.length) continue;
 
-      ctx.save();
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      ctx.arc(tr.det.indexTip.x, tr.det.indexTip.y, 12, 0, Math.PI * 2);
-      ctx.fill();
+          const admin = isAdminGroup(tr);
+          ctx.strokeStyle = admin ? "#69f0ae" : "#ffffff";
+          ctx.lineWidth = 2;
+          ctx.globalAlpha = 0.65;
 
-      // Undo mirroring for text
+          // connectors
+          for (let i = 0; i < HAND_CONNECTIONS.length; i++) {
+            const [a, b] = HAND_CONNECTIONS[i];
+            const p1 = lms[a],
+              p2 = lms[b];
+            if (!p1 || !p2) continue;
+            ctx.beginPath();
+            ctx.moveTo(p1.x * ov.width, p1.y * ov.height);
+            ctx.lineTo(p2.x * ov.width, p2.y * ov.height);
+            ctx.stroke();
+          }
+
+          // landmarks (small dots)
+          ctx.fillStyle = admin ? "#69f0ae" : "#ffffff";
+          for (let i = 0; i < lms.length; i++) {
+            const p = lms[i];
+            ctx.beginPath();
+            ctx.arc(p.x * ov.width, p.y * ov.height, 3, 0, Math.PI * 2);
+            ctx.fill();
+          }
+
+          ctx.globalAlpha = 1;
+        }
+      }
+
+      for (const tr of tracks) {
+        const allowed = isAllowedToControl(tr);
+        const admin = isAdminGroup(tr);
+        const color = admin
+          ? "rgba(105,240,174,0.45)"
+          : allowed
+            ? "rgba(255,204,102,0.4)"
+            : "rgba(255,85,102,0.35)";
+
+        ctx.save();
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(tr.det.indexTip.x, tr.det.indexTip.y, 12, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Undo mirroring for text
+        ctx.save();
+        ctx.scale(-1, 1);
+        ctx.translate(-ov.width, 0);
+
+        const label = admin ? "ADMIN" : allowed ? "GUEST" : "BLOCKED";
+        const gesture =
+          tr.det.gesture && tr.det.gesture !== "None"
+            ? ` [${tr.det.gesture}]`
+            : "";
+        const conf = tr.det.gestureConfidence
+          ? ` ${(tr.det.gestureConfidence * 100).toFixed(0)}%`
+          : "";
+
+        ctx.font = `bold 14px ${fontStack}`;
+        ctx.fillStyle = admin
+          ? "rgba(105,240,174,1.0)"
+          : allowed
+            ? "rgba(255,204,102,1.0)"
+            : "rgba(255,85,102,1.0)";
+
+        const tx = ov.width - tr.det.indexTip.x + 16;
+        const ty = tr.det.indexTip.y - 12;
+        ctx.fillText(label + gesture + conf, tx, ty);
+        ctx.restore();
+        ctx.restore();
+
+        if (tr.selectedStrokeId) {
+          const s = strokesRef.current.find(
+            (x) => x.id === tr.selectedStrokeId,
+          );
+          if (s) {
+            const bb = padBBox(s.bbox, 12);
+            ctx.save();
+            ctx.setLineDash([8, 6]);
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = admin
+              ? "rgba(105,240,174,0.9)"
+              : "rgba(255,204,102,0.9)";
+            ctx.strokeRect(
+              bb.minX,
+              bb.minY,
+              bb.maxX - bb.minX,
+              bb.maxY - bb.minY,
+            );
+            ctx.restore();
+          }
+        }
+      }
+
       ctx.save();
       ctx.scale(-1, 1);
       ctx.translate(-ov.width, 0);
-
-      const label = admin ? "ADMIN" : allowed ? "GUEST" : "BLOCKED";
-      const gesture = tr.det.gesture && tr.det.gesture !== "None" ? ` [${tr.det.gesture}]` : "";
-      const conf = tr.det.gestureConfidence ? ` ${(tr.det.gestureConfidence * 100).toFixed(0)}%` : "";
-
-      ctx.font = `bold 14px ${fontStack}`;
-      ctx.fillStyle = admin ? "rgba(105,240,174,1.0)" : allowed ? "rgba(255,204,102,1.0)" : "rgba(255,85,102,1.0)";
-
-      const tx = ov.width - tr.det.indexTip.x + 16;
-      const ty = tr.det.indexTip.y - 12;
-      ctx.fillText(label + gesture + conf, tx, ty);
+      ctx.fillStyle = "rgba(0,0,0,0.5)";
+      ctx.fillRect(ov.width - 700, ov.height - 46, 688, 32);
+      ctx.fillStyle = "rgba(255,255,255,0.95)";
+      ctx.font = `12px ${fontStack}`;
+      const g = guestsUnlocked() ? "ON" : "OFF";
+      ctx.fillText(
+        `Hands ${tracks.length} • Guest ${g} • Voice ${voiceRef.current?.name ?? "default"}`,
+        ov.width - 690,
+        ov.height - 26,
+      );
       ctx.restore();
-      ctx.restore();
-
-      if (tr.selectedStrokeId) {
-        const s = strokesRef.current.find((x) => x.id === tr.selectedStrokeId);
-        if (s) {
-          const bb = padBBox(s.bbox, 12);
-          ctx.save();
-          ctx.setLineDash([8, 6]);
-          ctx.lineWidth = 2;
-          ctx.strokeStyle = admin ? "rgba(105,240,174,0.9)" : "rgba(255,204,102,0.9)";
-          ctx.strokeRect(bb.minX, bb.minY, bb.maxX - bb.minX, bb.maxY - bb.minY);
-          ctx.restore();
-        }
-      }
-    }
-
-    ctx.save();
-    ctx.scale(-1, 1);
-    ctx.translate(-ov.width, 0);
-    ctx.fillStyle = "rgba(0,0,0,0.5)";
-    ctx.fillRect(ov.width - 700, ov.height - 46, 688, 32);
-    ctx.fillStyle = "rgba(255,255,255,0.95)";
-    ctx.font = `12px ${fontStack}`;
-    const g = guestsUnlocked() ? "ON" : "OFF";
-    ctx.fillText(`Hands ${tracks.length} • Guest ${g} • Voice ${voiceRef.current?.name ?? "default"}`, ov.width - 690, ov.height - 26);
-    ctx.restore();
-  }, [fontStack, guestsUnlocked, isAdminGroup, isAllowedToControl, arItems, theme]);
+    },
+    [
+      fontStack,
+      guestsUnlocked,
+      isAdminGroup,
+      isAllowedToControl,
+      arItems,
+      theme,
+    ],
+  );
 
   useEffect(() => {
     let mounted = true;
@@ -1859,44 +2724,62 @@ export default function App() {
       }
 
       setLoadingStep("2/4 Assets…");
-      const loadWithTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> => {
+      const loadWithTimeout = async <T,>(
+        promise: Promise<T>,
+        timeoutMs: number,
+        label: string,
+      ): Promise<T> => {
         return Promise.race([
           promise,
-          new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`${label} timeout`)), timeoutMs))
+          new Promise<T>((_, reject) =>
+            setTimeout(() => reject(new Error(`${label} timeout`)), timeoutMs),
+          ),
         ]);
       };
 
       try {
         const vision = await loadWithTimeout(
-          FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.32/wasm"),
+          FilesetResolver.forVisionTasks(
+            "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.32/wasm",
+          ),
           15000,
-          "WASM"
+          "WASM",
         );
 
-        const modelPath = "https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/1/gesture_recognizer.task";
-        const faceModelPath = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
+        const modelPath =
+          "https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/1/gesture_recognizer.task";
+        const faceModelPath =
+          "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
 
         const tryCreate = async (delegate: "GPU" | "CPU") => {
           setLoadingStep(`3/4 Init ${delegate}…`);
-          
-          const gesturePromise = loadWithTimeout(GestureRecognizer.createFromOptions(vision, {
-            baseOptions: { modelAssetPath: modelPath, delegate },
-            runningMode: "VIDEO",
-            numHands: settingsRef.current.maxHands,
-            minHandDetectionConfidence: 0.5,
-            minHandPresenceConfidence: 0.5,
-            minTrackingConfidence: 0.5,
-          }), 15000, `Gesture-${delegate}`);
 
-          const facePromise = loadWithTimeout(FaceLandmarker.createFromOptions(vision, {
-            baseOptions: { modelAssetPath: faceModelPath, delegate },
-            runningMode: "VIDEO",
-            numFaces: 1,
-            minFaceDetectionConfidence: 0.5,
-            minFacePresenceConfidence: 0.5,
-            minTrackingConfidence: 0.5,
-            outputFaceBlendshapes: true,
-          }), 15000, `Face-${delegate}`);
+          const gesturePromise = loadWithTimeout(
+            GestureRecognizer.createFromOptions(vision, {
+              baseOptions: { modelAssetPath: modelPath, delegate },
+              runningMode: "VIDEO",
+              numHands: settingsRef.current.maxHands,
+              minHandDetectionConfidence: 0.5,
+              minHandPresenceConfidence: 0.5,
+              minTrackingConfidence: 0.5,
+            }),
+            15000,
+            `Gesture-${delegate}`,
+          );
+
+          const facePromise = loadWithTimeout(
+            FaceLandmarker.createFromOptions(vision, {
+              baseOptions: { modelAssetPath: faceModelPath, delegate },
+              runningMode: "VIDEO",
+              numFaces: 1,
+              minFaceDetectionConfidence: 0.5,
+              minFacePresenceConfidence: 0.5,
+              minTrackingConfidence: 0.5,
+              outputFaceBlendshapes: true,
+            }),
+            15000,
+            `Face-${delegate}`,
+          );
 
           return Promise.all([gesturePromise, facePromise]);
         };
@@ -1959,7 +2842,8 @@ export default function App() {
 
     const schedule = (cb: (t: number) => void) => {
       const vAny = v as any;
-      if (typeof vAny.requestVideoFrameCallback === "function") vAny.requestVideoFrameCallback(cb);
+      if (typeof vAny.requestVideoFrameCallback === "function")
+        vAny.requestVideoFrameCallback(cb);
       else requestAnimationFrame(cb);
     };
 
@@ -1990,7 +2874,8 @@ export default function App() {
         if (faceLm && arEnabledRef.current) {
           // 10 fps face is enough for AR overlays
           const FACE_MIN_DT = 1000 / 10;
-          if ((step as any)._lastFaceMs === undefined) (step as any)._lastFaceMs = 0;
+          if ((step as any)._lastFaceMs === undefined)
+            (step as any)._lastFaceMs = 0;
 
           if (ts - (step as any)._lastFaceMs >= FACE_MIN_DT) {
             (step as any)._lastFaceMs = ts;
@@ -2006,7 +2891,9 @@ export default function App() {
         emaInfer = emaInfer === 0 ? inferMs : emaInfer * 0.85 + inferMs * 0.15;
 
         const landmarks = res.landmarks || [];
-        const handedness = (res.handedness || (res as any).handednesses || []) as any[];
+        const handedness = (res.handedness ||
+          (res as any).handednesses ||
+          []) as any[];
         const gestureResults = res.gestures || [];
 
         const draw = drawRef.current;
@@ -2021,28 +2908,81 @@ export default function App() {
             if (!hand?.length) continue;
 
             const hd0 = handedness[i]?.[0];
-            const handName = (hd0?.categoryName ?? "Unknown") as "Left" | "Right" | "Unknown";
+            const handName = (hd0?.categoryName ?? "Unknown") as
+              | "Left"
+              | "Right"
+              | "Unknown";
 
-            const wrist = { x: hand[IDX.wrist].x * W, y: hand[IDX.wrist].y * H };
-            const indexMcp = { x: hand[IDX.indexMcp].x * W, y: hand[IDX.indexMcp].y * H };
-            const middleMcp = { x: hand[IDX.middleMcp].x * W, y: hand[IDX.middleMcp].y * H };
+            const wrist = {
+              x: hand[IDX.wrist].x * W,
+              y: hand[IDX.wrist].y * H,
+            };
+            const indexMcp = {
+              x: hand[IDX.indexMcp].x * W,
+              y: hand[IDX.indexMcp].y * H,
+            };
+            const middleMcp = {
+              x: hand[IDX.middleMcp].x * W,
+              y: hand[IDX.middleMcp].y * H,
+            };
 
-            const thumbTip = { x: hand[IDX.thumbTip].x * W, y: hand[IDX.thumbTip].y * H };
-            const indexTip = { x: hand[IDX.indexTip].x * W, y: hand[IDX.indexTip].y * H };
-            const indexPip = { x: hand[IDX.indexPip].x * W, y: hand[IDX.indexPip].y * H };
+            const thumbTip = {
+              x: hand[IDX.thumbTip].x * W,
+              y: hand[IDX.thumbTip].y * H,
+            };
+            const indexTip = {
+              x: hand[IDX.indexTip].x * W,
+              y: hand[IDX.indexTip].y * H,
+            };
+            const indexPip = {
+              x: hand[IDX.indexPip].x * W,
+              y: hand[IDX.indexPip].y * H,
+            };
 
-            const middleTip = { x: hand[IDX.middleTip].x * W, y: hand[IDX.middleTip].y * H };
-            const middlePip = { x: hand[IDX.middlePip].x * W, y: hand[IDX.middlePip].y * H };
+            const middleTip = {
+              x: hand[IDX.middleTip].x * W,
+              y: hand[IDX.middleTip].y * H,
+            };
+            const middlePip = {
+              x: hand[IDX.middlePip].x * W,
+              y: hand[IDX.middlePip].y * H,
+            };
 
-            const ringTip = { x: hand[IDX.ringTip].x * W, y: hand[IDX.ringTip].y * H };
-            const ringPip = { x: hand[IDX.ringPip].x * W, y: hand[IDX.ringPip].y * H };
+            const ringTip = {
+              x: hand[IDX.ringTip].x * W,
+              y: hand[IDX.ringTip].y * H,
+            };
+            const ringPip = {
+              x: hand[IDX.ringPip].x * W,
+              y: hand[IDX.ringPip].y * H,
+            };
 
-            const pinkyTip = { x: hand[IDX.pinkyTip].x * W, y: hand[IDX.pinkyTip].y * H };
-            const pinkyPip = { x: hand[IDX.pinkyPip].x * W, y: hand[IDX.pinkyPip].y * H };
+            const pinkyTip = {
+              x: hand[IDX.pinkyTip].x * W,
+              y: hand[IDX.pinkyTip].y * H,
+            };
+            const pinkyPip = {
+              x: hand[IDX.pinkyPip].x * W,
+              y: hand[IDX.pinkyPip].y * H,
+            };
 
             const palm = {
-              x: ((hand[IDX.wrist].x + hand[IDX.indexMcp].x + hand[IDX.middleMcp].x + hand[IDX.ringMcp].x + hand[IDX.pinkyMcp].x) / 5) * W,
-              y: ((hand[IDX.wrist].y + hand[IDX.indexMcp].y + hand[IDX.middleMcp].y + hand[IDX.ringMcp].y + hand[IDX.pinkyMcp].y) / 5) * H,
+              x:
+                ((hand[IDX.wrist].x +
+                  hand[IDX.indexMcp].x +
+                  hand[IDX.middleMcp].x +
+                  hand[IDX.ringMcp].x +
+                  hand[IDX.pinkyMcp].x) /
+                  5) *
+                W,
+              y:
+                ((hand[IDX.wrist].y +
+                  hand[IDX.indexMcp].y +
+                  hand[IDX.middleMcp].y +
+                  hand[IDX.ringMcp].y +
+                  hand[IDX.pinkyMcp].y) /
+                  5) *
+                H,
             };
 
             const scalePx = Math.max(60, dist(wrist, middleMcp));
@@ -2074,14 +3014,23 @@ export default function App() {
               pinkyPip,
               scalePx,
               pinchStrength,
-            } as Omit<HandDet, "rawPoint" | "rawPalm" | "rawGrab" | "rawLandmarks" | "gesture" | "gestureConfidence">;
+            } as Omit<
+              HandDet,
+              | "rawPoint"
+              | "rawPalm"
+              | "rawGrab"
+              | "rawLandmarks"
+              | "gesture"
+              | "gestureConfidence"
+            >;
 
             const g = computeGestureBooleans(base);
 
             // Override manual booleans with robust MediaPipe gestures
             const isPointing = gestureName === "Pointing_Up";
             const isPalm = gestureName === "Open_Palm";
-            const isGrab = gestureName === "Closed_Fist" || gestureName === "Thumb_Up";
+            const isGrab =
+              gestureName === "Closed_Fist" || gestureName === "Thumb_Up";
 
             dets.push({
               ...base,
@@ -2090,7 +3039,7 @@ export default function App() {
               rawGrab: isGrab,
               rawLandmarks,
               gesture: gestureName,
-              gestureConfidence: gestureScore
+              gestureConfidence: gestureScore,
             });
           }
 
@@ -2119,7 +3068,15 @@ export default function App() {
     return () => {
       alive = false;
     };
-  }, [assignTracks, guestsUnlocked, processInteractions, ready, landmarker, faceLandmarker, updateAdminScaleFromTracks]);
+  }, [
+    assignTracks,
+    guestsUnlocked,
+    processInteractions,
+    ready,
+    landmarker,
+    faceLandmarker,
+    updateAdminScaleFromTracks,
+  ]);
 
   /* ------------------------------ render loop + FPS ------------------------------ */
   useEffect(() => {
@@ -2159,7 +3116,9 @@ export default function App() {
   /* ------------------------------ voice toggle ------------------------------ */
   useEffect(() => {
     if (!voiceOn) {
-      try { speechRecRef.current?.stop(); } catch { }
+      try {
+        speechRecRef.current?.stop();
+      } catch {}
       setVoiceHint("Mic off.");
       return;
     }
@@ -2206,7 +3165,7 @@ export default function App() {
   }, [inferFpsCap]);
   useEffect(() => {
     settingsRef.current.maxHands = maxHands;
-    landmarker?.setOptions?.({ numHands: maxHands }).catch?.(() => { });
+    landmarker?.setOptions?.({ numHands: maxHands }).catch?.(() => {});
   }, [maxHands]);
 
   /* ------------------------------ UI styles ------------------------------ */
@@ -2239,7 +3198,9 @@ export default function App() {
     } as CSSProperties,
   };
 
-  const onQuickShape = (shape: "circle" | "square" | "triangle" | "heart" | "star" | "arrow") => {
+  const onQuickShape = (
+    shape: "circle" | "square" | "triangle" | "heart" | "star" | "arrow",
+  ) => {
     drawShapeAtCenter(shape, "small", settingsRef.current.brushColor);
   };
 
@@ -2248,27 +3209,63 @@ export default function App() {
       {/* Opening Animation Overlay */}
       {initialOverlay && (
         <div className="opening-overlay">
-          <div className="nova-logo" />
-          <h1 style={{ marginTop: 24, fontSize: 32, fontWeight: 900, color: theme.accent, letterSpacing: 4 }}>NOVA PROTOCOL</h1>
-          <p style={{ marginTop: 8, color: theme.muted, fontSize: 14 }}>System Initializing...</p>
+          <div className="tensor-logo" />
+          <h1
+            style={{
+              marginTop: 24,
+              fontSize: 32,
+              fontWeight: 900,
+              color: theme.accent,
+              letterSpacing: 4,
+            }}
+          >
+            TENSOR PROTOCOL
+          </h1>
+          <p style={{ marginTop: 8, color: theme.muted, fontSize: 14 }}>
+            System Initializing...
+          </p>
         </div>
       )}
 
       {/* Instructions Modal */}
-      <div className={`modal-backdrop ${showInstructions ? "open" : ""}`} onClick={() => setShowInstructions(false)} />
+      <div
+        className={`modal-backdrop ${showInstructions ? "open" : ""}`}
+        onClick={() => setShowInstructions(false)}
+      />
       <div className={`instructions-modal ${showInstructions ? "open" : ""}`}>
         <h2 style={{ marginBottom: 20, color: theme.accent }}>Instructions</h2>
-        <div style={{ display: "flex", flexDirection: "column", gap: 12, fontSize: 14, color: theme.fg }}>
-          <p>• <strong>Point Index</strong> → Draw on canvas</p>
-          <p>• <strong>Pinch (Thumb + Index)</strong> → Grab and move strokes</p>
-          <p>• <strong>Twist while pinching</strong> → Rotate selected stroke</p>
-          <p>• <strong>Move hand closer/farther</strong> → Scale selected stroke</p>
-          <p>• <strong>Open Palm</strong> → Select existing strokes</p>
-          <p>• <strong>Voice Command</strong> → Start with "Nova..." (e.g., "Nova clear")</p>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 12,
+            fontSize: 14,
+            color: theme.fg,
+          }}
+        >
+          <p>
+            • <strong>Point Index</strong> → Draw on canvas
+          </p>
+          <p>
+            • <strong>Pinch (Thumb + Index)</strong> → Grab and move strokes
+          </p>
+          <p>
+            • <strong>Twist while pinching</strong> → Rotate selected stroke
+          </p>
+          <p>
+            • <strong>Move hand closer/farther</strong> → Scale selected stroke
+          </p>
+          <p>
+            • <strong>Open Palm</strong> → Select existing strokes
+          </p>
+          <p>
+            • <strong>Voice Command</strong> → Start with "Tensor..." (e.g.,
+            "Tensor clear")
+          </p>
         </div>
-        <button 
-          className="btn btn-primary" 
-          style={{ marginTop: 24, width: "100%" }} 
+        <button
+          className="btn btn-primary"
+          style={{ marginTop: 24, width: "100%" }}
           onClick={() => setShowInstructions(false)}
         >
           CLOSE
@@ -2278,116 +3275,284 @@ export default function App() {
       {/* Left Panel */}
       <div className="left-panel">
         <div className="card desktop-only">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <div style={{ fontSize: 20, fontWeight: 900, color: theme.accent }}>Nova Studio</div>
+              <div
+                style={{ fontSize: 20, fontWeight: 900, color: theme.accent }}
+              >
+                Tensor Studio
+              </div>
             </div>
-            <button className="btn btn-primary" style={{ padding: "6px 12px", fontSize: 11 }} onClick={() => setShowInstructions(true)}>
+            <button
+              className="btn btn-primary"
+              style={{ padding: "6px 12px", fontSize: 11 }}
+              onClick={() => setShowInstructions(true)}
+            >
               INSTRUCTIONS
             </button>
           </div>
           <div style={{ fontSize: 11, color: theme.muted, marginTop: 10 }}>
-            Protocol {ready ? "Active" : "Booting..."} • Voice Authorization Required
+            Protocol {ready ? "Active" : "Booting..."} • Voice Authorisation
+            Required
           </div>
         </div>
 
         <div className="card corner-tl">
-          <div className="label-row desktop-only" style={{ fontWeight: 900, color: theme.fg }}>Tools</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-            <button className="btn" title="Undo" onClick={undo}><Icons.Undo /></button>
-            <button className="btn" title="Redo" onClick={redo}><Icons.Redo /></button>
-            <button className="btn btn-danger desktop-only" title="Clear All" onClick={clearAll}><Icons.Clear /></button>
+          <div
+            className="label-row desktop-only"
+            style={{ fontWeight: 900, color: theme.fg }}
+          >
+            Tools
+          </div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr 1fr",
+              gap: 8,
+            }}
+          >
+            <button className="btn" title="Undo" onClick={undo}>
+              <Icons.Undo />
+            </button>
+            <button className="btn" title="Redo" onClick={redo}>
+              <Icons.Redo />
+            </button>
+            <button
+              className="btn btn-danger desktop-only"
+              title="Clear All"
+              onClick={clearAll}
+            >
+              <Icons.Clear />
+            </button>
           </div>
         </div>
 
         <div className="card corner-bl">
           <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8 }}>
-             <button className={`btn ${eraserMode ? "btn-primary" : ""}`} onClick={() => {
+            <button
+              className={`btn ${eraserMode ? "btn-primary" : ""}`}
+              onClick={() => {
                 const nx = !eraserMode;
                 settingsRef.current.eraserMode = nx;
                 setEraserMode(nx);
-                if(nx) speak("Eraser enabled.");
+                if (nx) speak("Eraser enabled.");
                 else speak("Draw mode.");
-             }}>
-               {eraserMode ? "Eraser ON" : "Eraser Mode"}
-             </button>
-             <button className="btn btn-danger mobile-only" title="Clear All" onClick={clearAll}>
-               <Icons.Clear /> CLEAR
-             </button>
+              }}
+            >
+              {eraserMode ? "Eraser ON" : "Eraser Mode"}
+            </button>
+            <button
+              className="btn btn-danger mobile-only"
+              title="Clear All"
+              onClick={clearAll}
+            >
+              <Icons.Clear /> CLEAR
+            </button>
           </div>
         </div>
 
         <div className="card corner-br">
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-            <button className="btn btn-primary" onClick={() => void downloadPng()} style={{ gap:6 }}><Icons.Export /> PNG</button>
-            <button className="btn btn-primary" onClick={() => void sharePng()} style={{ gap:6 }}><Icons.Share /> Share</button>
+          <div
+            style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}
+          >
+            <button
+              className="btn btn-primary"
+              onClick={() => void downloadPng()}
+              style={{ gap: 6 }}
+            >
+              <Icons.Export /> PNG
+            </button>
+            <button
+              className="btn btn-primary"
+              onClick={() => void sharePng()}
+              style={{ gap: 6 }}
+            >
+              <Icons.Share /> Share
+            </button>
           </div>
         </div>
 
         <div className="card desktop-only">
-          <div className="label-row" style={{ fontWeight: 900, color: theme.fg }}>Appearance</div>
+          <div
+            className="label-row"
+            style={{ fontWeight: 900, color: theme.fg }}
+          >
+            Appearance
+          </div>
           <div className="label-row">
             <span>Brush Color</span>
             <input
               type="color"
               value={brushColor.startsWith("#") ? brushColor : "#69f0ae"}
               onChange={(e) => setBrushColor(e.target.value)}
-              style={{ width: 44, height: 28, background: "transparent", border: "none", cursor: "pointer" }}
+              style={{
+                width: 44,
+                height: 28,
+                background: "transparent",
+                border: "none",
+                cursor: "pointer",
+              }}
             />
           </div>
 
           <div className="label-row">
             <span>Thickness</span>
             <input
-              type="range" min={1} max={40} step={0.5}
+              type="range"
+              min={1}
+              max={40}
+              step={0.5}
               value={baseThickness}
               onChange={(e) => setBaseThickness(parseFloat(e.target.value))}
               style={{ flex: 1 }}
             />
-            <span style={{ width: 40, textAlign: "right", color: theme.accent }}>{baseThickness.toFixed(0)}</span>
+            <span
+              style={{ width: 40, textAlign: "right", color: theme.accent }}
+            >
+              {baseThickness.toFixed(0)}
+            </span>
           </div>
 
           <div style={{ height: 16 }} />
-          
-          <div className="label-row" style={{ fontWeight: 900, color: theme.fg }}>Quick Shapes</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
-            <button className="btn icon-btn" onClick={() => onQuickShape("circle")}><Icons.Circle /></button>
-            <button className="btn icon-btn" onClick={() => onQuickShape("square")}><Icons.Square /></button>
-            <button className="btn icon-btn" onClick={() => onQuickShape("star")}><Icons.Star /></button>
-            <button className="btn icon-btn" onClick={() => onQuickShape("heart")}><Icons.Heart /></button>
-            <button className="btn icon-btn" onClick={() => onQuickShape("arrow")}><Icons.Arrow /></button>
-            <button className="btn icon-btn" onClick={() => onQuickShape("triangle")}><Icons.Triangle /></button>
+
+          <div
+            className="label-row"
+            style={{ fontWeight: 900, color: theme.fg }}
+          >
+            Quick Shapes
+          </div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr 1fr",
+              gap: 6,
+            }}
+          >
+            <button
+              className="btn icon-btn"
+              onClick={() => onQuickShape("circle")}
+            >
+              <Icons.Circle />
+            </button>
+            <button
+              className="btn icon-btn"
+              onClick={() => onQuickShape("square")}
+            >
+              <Icons.Square />
+            </button>
+            <button
+              className="btn icon-btn"
+              onClick={() => onQuickShape("star")}
+            >
+              <Icons.Star />
+            </button>
+            <button
+              className="btn icon-btn"
+              onClick={() => onQuickShape("heart")}
+            >
+              <Icons.Heart />
+            </button>
+            <button
+              className="btn icon-btn"
+              onClick={() => onQuickShape("arrow")}
+            >
+              <Icons.Arrow />
+            </button>
+            <button
+              className="btn icon-btn"
+              onClick={() => onQuickShape("triangle")}
+            >
+              <Icons.Triangle />
+            </button>
           </div>
 
           <div style={{ height: 12 }} />
 
           <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn" style={{ flex: 1, gap:6 }} onClick={() => setGlow((v) => !v)}>
+            <button
+              className="btn"
+              style={{ flex: 1, gap: 6 }}
+              onClick={() => setGlow((v) => !v)}
+            >
               <Icons.Glow /> {glow ? "On" : "Off"}
             </button>
-            <button className="btn" style={{ flex: 1, gap:6 }} onClick={() => setShowLandmarks((v) => !v)}>
+            <button
+              className="btn"
+              style={{ flex: 1, gap: 6 }}
+              onClick={() => setShowLandmarks((v) => !v)}
+            >
               <Icons.Landmarks /> {showLandmarks ? "On" : "Off"}
             </button>
           </div>
         </div>
 
         <div className="card desktop-only">
-          <div className="label-row" style={{ fontWeight: 900, color: theme.fg }}>Social Protocol</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-            <button className="btn" style={{ background: "rgba(37,211,102,0.1)" }} onClick={() => void sharePng("whatsapp")}><Icons.WhatsApp /></button>
-            <button className="btn" style={{ background: "rgba(225,48,108,0.1)" }} onClick={() => void sharePng("instagram")}><Icons.Instagram /></button>
-            <button className="btn" style={{ background: "rgba(24,119,242,0.1)" }} onClick={() => void sharePng("facebook")}><Icons.Facebook /></button>
-            <button className="btn" style={{ background: "rgba(255,255,255,0.05)" }} onClick={() => void sharePng("x")}><Icons.Twitter /></button>
+          <div
+            className="label-row"
+            style={{ fontWeight: 900, color: theme.fg }}
+          >
+            Social Protocol
           </div>
-          <button className="btn" style={{ marginTop: 8, width: "100%" }} onClick={() => void copyToClipboard()}>COPY TO CLIPBOARD</button>
+          <div
+            style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}
+          >
+            <button
+              className="btn"
+              style={{ background: "rgba(37,211,102,0.1)" }}
+              onClick={() => void sharePng("whatsapp")}
+            >
+              <Icons.WhatsApp />
+            </button>
+            <button
+              className="btn"
+              style={{ background: "rgba(225,48,108,0.1)" }}
+              onClick={() => void sharePng("instagram")}
+            >
+              <Icons.Instagram />
+            </button>
+            <button
+              className="btn"
+              style={{ background: "rgba(24,119,242,0.1)" }}
+              onClick={() => void sharePng("facebook")}
+            >
+              <Icons.Facebook />
+            </button>
+            <button
+              className="btn"
+              style={{ background: "rgba(255,255,255,0.05)" }}
+              onClick={() => void sharePng("x")}
+            >
+              <Icons.Twitter />
+            </button>
+          </div>
+          <button
+            className="btn"
+            style={{ marginTop: 8, width: "100%" }}
+            onClick={() => void copyToClipboard()}
+          >
+            COPY TO CLIPBOARD
+          </button>
         </div>
         <div className="card">
-          <div className="label-row" style={{ fontWeight: 900, color: theme.fg }}>System Config</div>
+          <div
+            className="label-row"
+            style={{ fontWeight: 900, color: theme.fg }}
+          >
+            System Config
+          </div>
           <div className="label-row">
             <span>Accuracy</span>
             <select
               value={inferPreset}
-              onChange={(e) => setInferPreset(e.target.value as InferencePreset)}
+              onChange={(e) =>
+                setInferPreset(e.target.value as InferencePreset)
+              }
               style={{
                 background: "rgba(255,255,255,0.05)",
                 border: "1px solid var(--border)",
@@ -2404,16 +3569,28 @@ export default function App() {
 
           <div className="label-row">
             <span>FPS Cap</span>
-            <input type="range" min={10} max={30} step={1} value={inferFpsCap} onChange={(e) => setInferFpsCap(parseInt(e.target.value, 10))} />
+            <input
+              type="range"
+              min={10}
+              max={30}
+              step={1}
+              value={inferFpsCap}
+              onChange={(e) => setInferFpsCap(parseInt(e.target.value, 10))}
+            />
             <span style={{ width: 24, textAlign: "right" }}>{inferFpsCap}</span>
           </div>
 
           <div style={{ height: 12 }} />
-          <div className="label-row" style={{ fontWeight: 900, color: theme.fg }}>Camera Selection</div>
-          
+          <div
+            className="label-row"
+            style={{ fontWeight: 900, color: theme.fg }}
+          >
+            Camera Selection
+          </div>
+
           <div className="label-row">
             <span>Prefer Integrated</span>
-            <button 
+            <button
               className={`btn ${preferIntegrated ? "btn-primary" : ""}`}
               style={{ padding: "4px 8px", fontSize: 10 }}
               onClick={() => setPreferIntegrated(!preferIntegrated)}
@@ -2437,11 +3614,11 @@ export default function App() {
                 color: theme.fg,
                 padding: "4px 8px",
                 maxWidth: "140px",
-                fontSize: 10
+                fontSize: 10,
               }}
             >
               <option value="">Default (Facing Mode)</option>
-              {devices.map(d => (
+              {devices.map((d) => (
                 <option key={d.deviceId} value={d.deviceId}>
                   {d.label || `Camera ${d.deviceId.slice(0, 4)}`}
                 </option>
@@ -2451,33 +3628,55 @@ export default function App() {
         </div>
 
         <div className="card corner-tr">
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-            <button 
-              className="btn" 
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 8,
+            }}
+          >
+            <button
+              className="btn"
               title="Swap Camera"
               onClick={() => {
-                setFacingMode((f: "user" | "environment") => f === "user" ? "environment" : "user");
+                setFacingMode((f: "user" | "environment") =>
+                  f === "user" ? "environment" : "user",
+                );
                 speak("Switching camera.");
               }}
             >
               <Icons.Cameraswitch />
             </button>
-            <button className={`btn ${voiceOn ? "btn-primary" : ""}`} onClick={() => setVoiceOn((v) => !v)}>
+            <button
+              className={`btn ${voiceOn ? "btn-primary" : ""}`}
+              onClick={() => setVoiceOn((v) => !v)}
+            >
               {voiceOn ? <Icons.MicOn /> : <Icons.MicOff />}
             </button>
           </div>
-          <div className="desktop-only" style={{ marginTop: 10, fontSize: 11, color: theme.muted, fontStyle: "italic" }}>
+          <div
+            className="desktop-only"
+            style={{
+              marginTop: 10,
+              fontSize: 11,
+              color: theme.muted,
+              fontStyle: "italic",
+            }}
+          >
             {voiceHint}
           </div>
         </div>
 
         <div className="card" style={{ fontSize: 11, color: theme.muted }}>
-          FPS {hud.fps.toFixed(0)} • Latency {hud.inferMs.toFixed(0)}ms • Strokes {hud.strokes} • Guest {hud.guestUnlocked ? "Unlocked" : "Locked"}
+          FPS {hud.fps.toFixed(0)} • Latency {hud.inferMs.toFixed(0)}ms •
+          Strokes {hud.strokes} • Guest{" "}
+          {hud.guestUnlocked ? "Unlocked" : "Locked"}
         </div>
       </div>
 
       {/* Main Interaction Stage */}
-      <div 
+      <div
         className={`canvas-wrapper ${tracksRef.current.length > 0 ? "active" : ""}`}
         style={{ aspectRatio: `${videoAspect}` }}
       >
@@ -2485,26 +3684,45 @@ export default function App() {
         <canvas ref={drawRef} className="canvas-layer" />
         <canvas ref={overlayRef} className="canvas-layer" />
         <canvas ref={inferCanvasRef} style={{ display: "none" }} />
-        
+
         {/* Vignette & HUD Overlays */}
-        <div style={{ position: "absolute", inset: 0, pointerEvents: "none", boxShadow: "inset 0 0 100px rgba(0,0,0,0.5)" }} />
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            pointerEvents: "none",
+            boxShadow: "inset 0 0 100px rgba(0,0,0,0.5)",
+          }}
+        />
         {!ready && (
-          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.4)", backdropFilter: "blur(8px)" }}>
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background: "rgba(0,0,0,0.4)",
+              backdropFilter: "blur(8px)",
+            }}
+          >
             <div style={{ textAlign: "center" }}>
-              <div className="nova-logo" style={{ margin: "0 auto 20px" }} />
-              <div style={{ fontSize: 18, fontWeight: 900, color: theme.accent }}>{loadingStep}</div>
+              <div className="tensor-logo" style={{ margin: "0 auto 20px" }} />
+              <div
+                style={{ fontSize: 18, fontWeight: 900, color: theme.accent }}
+              >
+                {loadingStep}
+              </div>
             </div>
           </div>
         )}
       </div>
 
-      <div className="nova-status-container">
-         <div className={`nova-indicator ${isSpeaking ? "speaking" : ""}`} />
+      <div className="tensor-status-container">
+        <div className={`tensor-indicator ${isSpeaking ? "speaking" : ""}`} />
       </div>
 
-      <div className="mobile-only mobile-voice-hint">
-        {voiceHint}
-      </div>
+      <div className="mobile-only mobile-voice-hint">{voiceHint}</div>
     </div>
   );
 }
