@@ -645,6 +645,52 @@ const Icons = {
       <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
     </svg>
   ),
+  Save: () => (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+      <polyline points="17 21 17 13 7 13 7 21" />
+      <polyline points="7 3 7 8 15 8" />
+    </svg>
+  ),
+  Copy: () => (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </svg>
+  ),
+  Eraser: () => (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M20 20H7L3 16c-1-1-1-2.5 0-3.5l9.5-9.5c1-1 2.5-1 3.5 0l5.5 5.5c1 1 1 2.5 0 3.5L13 20.5" />
+      <line x1="7" y1="20" x2="20" y2="20" />
+    </svg>
+  ),
   Arrow: () => (
     <svg
       width="20"
@@ -1129,6 +1175,11 @@ export default function App() {
       targetH = window.innerHeight;
       setVideoAspect(targetW / targetH);
     } else {
+      // Desktop: use actual video dimensions to avoid zoom
+      // Get the rendered size of the video element
+      const rect = v.getBoundingClientRect();
+      targetW = Math.floor(rect.width);
+      targetH = Math.floor(rect.height);
       setVideoAspect(w / h);
     }
 
@@ -2062,16 +2113,28 @@ export default function App() {
   const updateDevices = useCallback(async () => {
     try {
       const all = await navigator.mediaDevices.enumerateDevices();
-      const video = all.filter((d) => d.kind === "videoinput");
+      let video = all.filter((d) => d.kind === "videoinput");
+
+      // On desktop, filter out phone/remote cameras
+      if (!isMobile()) {
+        const filtered = video.filter(
+          (d) => !/phone|mobile|remote|link to windows/i.test(d.label),
+        );
+        // Only use filtered list if we have at least one camera left
+        if (filtered.length > 0) {
+          video = filtered;
+        }
+      }
+
       setDevices(video);
 
       if (preferIntegrated && video.length > 0) {
-        // Priority: "user" facing, then "integrated"/"facetime", then simply the 0th index if it looks like a real cam
-        const userFacing = video.find((d) => /user|front/i.test(d.label));
+        // Priority: integrated/built-in, then "user" facing, then first available
         const integrated = video.find((d) =>
           /integrated|built-in|facetime/i.test(d.label),
         );
-        const target = userFacing || integrated || video[0];
+        const userFacing = video.find((d) => /user|front/i.test(d.label));
+        const target = integrated || userFacing || video[0];
 
         if (target) setSelectedDeviceId(target.deviceId);
       }
@@ -2750,21 +2813,6 @@ export default function App() {
           }
         }
       }
-
-      ctx.save();
-      ctx.scale(-1, 1);
-      ctx.translate(-ov.width, 0);
-      ctx.fillStyle = "rgba(0,0,0,0.5)";
-      ctx.fillRect(ov.width - 700, ov.height - 46, 688, 32);
-      ctx.fillStyle = "rgba(255,255,255,0.95)";
-      ctx.font = `12px ${fontStack}`;
-      const g = guestsUnlocked() ? "ON" : "OFF";
-      ctx.fillText(
-        `Hands ${tracks.length} • Guest ${g} • Voice ${voiceRef.current?.name ?? "default"}`,
-        ov.width - 690,
-        ov.height - 26,
-      );
-      ctx.restore();
     },
     [
       fontStack,
@@ -3439,7 +3487,7 @@ export default function App() {
               speak(nx ? "Eraser." : "Draw.");
             }}
           >
-            <span style={{ fontWeight: 900 }}>E</span>
+            <Icons.Eraser />
           </button>
           <button className="btn icon-only btn-danger" onClick={clearAll}>
             <Icons.Clear />
@@ -3448,7 +3496,7 @@ export default function App() {
             className="btn icon-only"
             onClick={() => void copyToClipboard()}
           >
-            <span style={{ fontSize: 10 }}>CPY</span>
+            <Icons.Copy />
           </button>
         </div>
 
@@ -3500,7 +3548,7 @@ export default function App() {
             style={{ borderRadius: 20, padding: "8px 16px" }}
             onClick={() => void downloadPng()}
           >
-            SAVE
+            <Icons.Save />
           </button>
         </div>
       </div>
