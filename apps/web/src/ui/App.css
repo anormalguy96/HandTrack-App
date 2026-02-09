@@ -338,15 +338,17 @@ select option {
 
   /* --- Bottom Corners --- */
   .corner-bl {
+    /* Last changes 2026: Slightly up, slightly right */
     position: absolute;
-    bottom: calc(20px + env(safe-area-inset-bottom));
-    left: 20px;
+    bottom: calc(30px + env(safe-area-inset-bottom));
+    left: 25px;
     z-index: 30;
   }
   .corner-br {
+    /* Last changes 2026: Slightly up, slightly left */
     position: absolute;
-    bottom: calc(20px + env(safe-area-inset-bottom));
-    right: 20px;
+    bottom: calc(30px + env(safe-area-inset-bottom));
+    right: 25px;
     z-index: 30;
   }
 
@@ -536,8 +538,9 @@ select option {
 }
 
 .mobile-only.flux-status-container {
+  /* Last changes 2026: Reduced gap by 10px */
   position: absolute;
-  bottom: calc(50px + env(safe-area-inset-bottom));
+  bottom: calc(40px + env(safe-area-inset-bottom));
   left: 50%;
   transform: translateX(-50%);
   z-index: 100;
@@ -601,4 +604,33 @@ select option {
     transform: scale(1.1);
     box-shadow: 0 0 20px var(--accent);
   }
+}
+
+/* ---------------- ANIMATIONS (NEW) ---------------- */
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes slideInLeft {
+  from {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.rotate-360 {
+  animation: spin 0.6s ease-in-out;
+}
+
+.slide-in-left {
+  animation: slideInLeft 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
