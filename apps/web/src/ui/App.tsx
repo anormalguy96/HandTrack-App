@@ -1172,7 +1172,7 @@ export default function App() {
     if (!w || !h) return;
 
     // Mobile: force portrait aspect (canvas fills screen or 9:16 constraint)
-    const mobile = isMobile();
+    const mobile = mobileCached;
     let targetW = w;
     let targetH = h;
 
@@ -1929,7 +1929,9 @@ export default function App() {
         if (
           t.includes("all") ||
           t.includes("canvas") ||
-          t.includes("everything")
+          t.includes("everything") ||
+          t === "tensor clear" ||
+          t === "tensor clear."
         ) {
           clearAll();
           return;
@@ -2086,7 +2088,10 @@ export default function App() {
 
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const res = event.results[i];
-        const txt = res[0].transcript.trim();
+        let txt = res[0].transcript.trim();
+        // [FIX] Strip punctuation that might break exact matches or includes
+        txt = txt.replace(/[.,?!]/g, "");
+
         if (res.isFinal) finalText += (finalText ? " " : "") + txt;
         else interim += (interim ? " " : "") + txt;
       }
@@ -3596,6 +3601,11 @@ export default function App() {
             <Icons.Save />
           </button>
         </div>
+
+        {/* [NEW] Persistent Mobile Logo Bottom-Center */}
+        <div className="mobile-logo-fixed">
+          <div className="tensor-logo" />
+        </div>
       </div>
 
       {/* ---------------- DESKTOP LAYOUT (Preserved but wrapped) ---------------- */}
@@ -3856,19 +3866,7 @@ export default function App() {
             onClick={() => setVoiceOn(!voiceOn)}
             style={{ width: "100%", gap: 8 }}
           >
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-              <line x1="12" y1="19" x2="12" y2="23" />
-              <line x1="8" y1="23" x2="16" y2="23" />
-            </svg>
+            <div className="tensor-logo small" />
             {voiceOn ? "Voice ON" : "Voice OFF"}
           </button>
           {voiceOn && (
@@ -4000,14 +3998,6 @@ export default function App() {
           className={`canvas-layer ${facingMode === "user" ? "mirrored" : ""}`}
         />
         <canvas ref={inferCanvasRef} style={{ display: "none" }} />
-        {!ready && (
-          <div
-            className="opening-overlay"
-            style={{ background: "transparent" }}
-          >
-            <div className="nova-logo" />
-          </div>
-        )}
       </div>
 
       {/* Shared Canvas Wrapper mounted once */}
