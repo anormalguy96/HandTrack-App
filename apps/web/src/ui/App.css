@@ -535,6 +535,7 @@ select option {
   left: 50%;
   transform: translateX(-50%);
   z-index: 100;
+  visibility: hidden;
 }
 
 .desktop-only.flux-status-container {
@@ -543,6 +544,7 @@ select option {
   left: 50%;
   transform: translate(-50%, 0%);
   z-index: 100;
+  visibility: hidden;
 }
 
 .flux-indicator {
