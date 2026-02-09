@@ -850,7 +850,13 @@ export default function App() {
   const [faceLandmarker, setFaceLandmarker] = useState<FaceLandmarker | null>(
     null,
   ); // [NEW] Ref for face
-  const [arItems, setArItems] = useState<{ hat: boolean; glasses: boolean;beard: boolean;mustache: boolean }>({ // [NEW] AR State
+  const [arItems, setArItems] = useState<{
+    hat: boolean;
+    glasses: boolean;
+    beard: boolean;
+    mustache: boolean;
+  }>({
+    // [NEW] AR State
     hat: false,
     glasses: false,
     mustache: false,
@@ -946,7 +952,7 @@ export default function App() {
     voiceOnRef.current = voiceOn;
   }, [voiceOn]);
   const [voiceHint, setVoiceHint] = useState(
-    'Try: "Tensor change color to red", "Tensor glow off", "Tensor export".',
+    'Try: "Flux change color to red", "Flux glow off", "Flux export".',
   );
   const [isSpeaking, setIsSpeaking] = useState(false);
 
@@ -1631,7 +1637,7 @@ export default function App() {
 
   const sharePng = useCallback(
     async (target?: "whatsapp" | "instagram" | "tiktok" | "facebook" | "x") => {
-      const msg = "Check out my hand tracking art! Made with Tensor Studio.";
+      const msg = "Check out my hand tracking art! Made with Flux Studio.";
       const nav = navigator as any;
 
       // Native file sharing (Attach PNG)
@@ -1639,14 +1645,14 @@ export default function App() {
         try {
           const blob = await exportBlobMirrored();
           if (!blob) throw new Error("No blob generated");
-          const file = new File([blob], `tensor_art_${Date.now()}.png`, {
+          const file = new File([blob], `flux_art_${Date.now()}.png`, {
             type: "image/png",
           });
 
           if (navigator.canShare({ files: [file] })) {
             await navigator.share({
               files: [file],
-              title: "Tensor Studio",
+              title: "Flux Studio",
               text: msg,
             });
             speak("Shared!");
@@ -1880,14 +1886,22 @@ export default function App() {
     (text: string) => {
       const t = text.toLowerCase();
 
-      if (!t.includes("tensor")) {
-        console.log("[Voice] Ignored - no 'Tensor' keyword:", t);
+      if (!t.includes("flux")) {
+        console.log("[Voice] Ignored - no 'Flux' keyword:", t);
         return;
       }
 
       // STRICT EXPORT COMMANDS
       if (t.includes("export") || t.includes("share") || t.includes("send")) {
-        if (textMatches(t, ["whatsapp", "whats app", "what's up", "what's app", "wassup"])) {
+        if (
+          textMatches(t, [
+            "whatsapp",
+            "whats app",
+            "what's up",
+            "what's app",
+            "wassup",
+          ])
+        ) {
           speak("Sharing to WhatsApp...");
           return void sharePng("whatsapp");
         }
@@ -1895,7 +1909,17 @@ export default function App() {
           speak("Sharing to Instagram...");
           return void sharePng("instagram");
         }
-        if (textMatches(t, ["tiktok", "tic toc", "tik tok", "tick tock", "teek tuck", "teek tok", "tick tuck"])) {
+        if (
+          textMatches(t, [
+            "tiktok",
+            "tic toc",
+            "tik tok",
+            "tick tock",
+            "teek tuck",
+            "teek tok",
+            "tick tuck",
+          ])
+        ) {
           speak("Sharing to TikTok...");
           return void sharePng("tiktok");
         }
@@ -1903,7 +1927,9 @@ export default function App() {
           speak("Sharing to Facebook...");
           return void sharePng("facebook");
         }
-        if (textMatches(t, ["twitter", "x.com", "tweet", "x", "ex", "ex.com"])) {
+        if (
+          textMatches(t, ["twitter", "x.com", "tweet", "x", "ex", "ex.com"])
+        ) {
           speak("Sharing to X...");
           return void sharePng("x");
         }
@@ -1953,8 +1979,8 @@ export default function App() {
           t.includes("all") ||
           t.includes("canvas") ||
           t.includes("everything") ||
-          t === "tensor clear" ||
-          t === "tensor clear."
+          t === "flux clear" ||
+          t === "flux clear."
         ) {
           clearAll();
           return;
@@ -2753,38 +2779,47 @@ export default function App() {
 
         // Beard
         if (arItems.beard) {
-          const forehead = get(10); // Top of head
-          const chin = get(152);
-          const headHeight = dist(forehead, chin);
-          const center = { x: forehead.x, y: forehead.y - headHeight * 0.3 };
-          const size = headHeight * 1.5;
+          const chin = get(152); // Tip of chin
+          const leftJaw = get(132); // Left jaw
+          const rightJaw = get(361); // Right jaw
+          const mouth = get(13); // Upper lip
+
+          const center = {
+            x: (leftJaw.x + rightJaw.x) / 2,
+            y: chin.y + (chin.y - mouth.y) * 0.2,
+          };
+          const width = dist(leftJaw, rightJaw) * 1.2;
+          const height = (chin.y - mouth.y) * 1.5;
 
           ctx.save();
           ctx.translate(center.x, center.y);
-          // Angle from chin to forehead
-          const angle =
-            Math.atan2(forehead.y - chin.y, forehead.x - chin.x) + Math.PI / 2;
+
+          const angle = Math.atan2(
+            rightJaw.y - leftJaw.y,
+            rightJaw.x - leftJaw.x,
+          );
           ctx.rotate(angle);
 
           // Draw Cyber Beard
-          ctx.fillStyle = theme.accent;
-          ctx.strokeStyle = "#fff";
-          ctx.lineWidth = 3;
+          ctx.fillStyle = "rgba(105, 240, 174, 0.2)";
+          ctx.strokeStyle = theme.accent;
+          ctx.lineWidth = 2;
 
           ctx.beginPath();
-          ctx.moveTo(-size / 2, 0); // Brim L
-          ctx.lineTo(size / 2, 0); // Brim R
-          ctx.lineTo(size / 3, -size / 2); // Top R
-          ctx.lineTo(-size / 3, -size / 2); // Top L
+          ctx.moveTo(-width / 2, -height / 2);
+          ctx.quadraticCurveTo(0, height, width / 2, -height / 2);
+          ctx.lineTo(width / 2, -height / 3);
+          ctx.quadraticCurveTo(0, height * 0.8, -width / 2, -height / 3);
           ctx.closePath();
           ctx.fill();
           ctx.stroke();
 
-          // Neon Glow line
+          // Neon Glow line along the bottom edge
           ctx.beginPath();
-          ctx.strokeStyle = "#0ff";
-          ctx.moveTo(-size / 3, -size / 4);
-          ctx.lineTo(size / 3, -size / 4);
+          ctx.strokeStyle = "#fff";
+          ctx.lineWidth = 1;
+          ctx.moveTo(-width / 3, height * 0.4);
+          ctx.quadraticCurveTo(0, height * 0.6, width / 3, height * 0.4);
           ctx.stroke();
 
           ctx.restore();
@@ -2792,38 +2827,39 @@ export default function App() {
 
         // Mustache
         if (arItems.mustache) {
-          const nose = get(4);
-          const chin = get(152);
-          const headHeight = dist(nose, chin);
-          const center = { x: nose.x, y: nose.y + headHeight * 0.2 };
-          const size = headHeight * 0.8;
+          const nose = get(4); // Tip of nose
+          const mouth = get(13); // Top of mouth
+          const leftMouth = get(61);
+          const rightMouth = get(291);
+
+          const center = {
+            x: nose.x,
+            y: (nose.y + mouth.y) / 2 + (mouth.y - nose.y) * 0.2,
+          };
+          const width = dist(leftMouth, rightMouth) * 1.1;
+          const height = (mouth.y - nose.y) * 0.6;
 
           ctx.save();
           ctx.translate(center.x, center.y);
-          // Angle from chin to nose
-          const angle =
-            Math.atan2(nose.y - chin.y, nose.x - chin.x) + Math.PI / 2;
+
+          const angle = Math.atan2(
+            rightMouth.y - leftMouth.y,
+            rightMouth.x - leftMouth.x,
+          );
           ctx.rotate(angle);
 
           // Draw Cyber Mustache
           ctx.fillStyle = theme.accent;
           ctx.strokeStyle = "#fff";
-          ctx.lineWidth = 3;
+          ctx.lineWidth = 2;
 
           ctx.beginPath();
-          ctx.moveTo(-size / 2, 0); // Brim L
-          ctx.lineTo(size / 2, 0); // Brim R
-          ctx.lineTo(size / 3, -size / 2); // Top R
-          ctx.lineTo(-size / 3, -size / 2); // Top L
+          ctx.moveTo(-width / 2, 0);
+          ctx.quadraticCurveTo(0, -height, width / 2, 0);
+          ctx.lineTo(width / 2, height / 3);
+          ctx.quadraticCurveTo(0, 0, -width / 2, height / 3);
           ctx.closePath();
           ctx.fill();
-          ctx.stroke();
-
-          // Neon Glow line
-          ctx.beginPath();
-          ctx.strokeStyle = "#0ff";
-          ctx.moveTo(-size / 3, -size / 4);
-          ctx.lineTo(size / 3, -size / 4);
           ctx.stroke();
 
           ctx.restore();
@@ -3708,7 +3744,7 @@ export default function App() {
 
         {/* [NEW] Persistent Mobile Logo Bottom-Center */}
         <div className="mobile-logo-fixed">
-          <div className="tensor-logo" />
+          <div className="flux-logo" />
         </div>
       </div>
 
@@ -3727,7 +3763,7 @@ export default function App() {
               <div
                 style={{ fontSize: 20, fontWeight: 900, color: theme.accent }}
               >
-                Tensor Studio
+                Flux Studio
               </div>
             </div>
             <button
@@ -3970,7 +4006,7 @@ export default function App() {
             onClick={() => setVoiceOn(!voiceOn)}
             style={{ width: "100%", gap: 8 }}
           >
-            <div className="tensor-logo small" />
+            <div className="flux-logo small" />
             {voiceOn ? "Voice ON" : "Voice OFF"}
           </button>
           {voiceOn && (
@@ -4080,8 +4116,8 @@ export default function App() {
           The Canvas Wrapper is shared. But on Mobile it's absolute. On desktop it's in the grid.
       */}
       {/* Voice Status Indicator (Shared) */}
-      <div className="tensor-status-container">
-        <div className={`tensor-indicator ${isSpeaking ? "speaking" : ""}`} />
+      <div className="flux-status-container">
+        <div className={`flux-indicator ${isSpeaking ? "speaking" : ""}`} />
       </div>
 
       <div
