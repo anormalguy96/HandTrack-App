@@ -497,32 +497,17 @@ select option {
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: contain; /* Desktop: contain to avoid zoom */
-  filter: brightness(0.9) contrast(1.1); /* Reduced complexity */
+  object-fit: contain;
 }
 
-/* Mirrored mode only for front camera */
 .video-layer.mirrored,
 .canvas-layer.mirrored {
   transform: scaleX(-1);
 }
 
-/* Mobile override */
 @media (max-width: 1024px) {
   .video-layer {
-    /* Changed to contain to avoid the zoom-in effect user complained about */
-    object-fit: contain;
-    filter: brightness(0.9) contrast(1.1); /* Reduced complexity */
-    transform: scale(0.96);
-    transform-origin: center;
-    transform: translate(-50%, -50%);
-    z-index: 1;
-    pointer-events: none;
-    opacity: 0.5;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
-    transform: scale(0.96);
-    
+    object-fit: cover;
   }
 }
 .canvas-layer {

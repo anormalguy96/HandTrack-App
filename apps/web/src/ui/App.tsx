@@ -2489,7 +2489,9 @@ export default function App() {
         video: {
           width: { ideal: mobileCached ? 720 : 1280 },
           height: { ideal: mobileCached ? 1280 : 720 },
-          aspectRatio: { ideal: mobileCached ? 9 / 16 : 16 / 9 },
+          aspectRatio: {
+            ideal: mobileCached ? 9 / 16 : 16 / 9,
+          },
         },
         audio: false,
       };
@@ -3479,7 +3481,7 @@ export default function App() {
             v.videoHeight,
             vW,
             vH,
-            isMobileLayout ? "contain" : "fill",
+            isMobileLayout ? "cover" : "fill",
           );
 
           // Reset point pool for this frame
