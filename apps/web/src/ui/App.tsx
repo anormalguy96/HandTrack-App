@@ -2118,7 +2118,10 @@ export default function App() {
       // On desktop, filter out phone/remote cameras
       if (!isMobile()) {
         const filtered = video.filter(
-          (d) => !/phone|mobile|remote|link to windows/i.test(d.label),
+          (d) =>
+            !/phone|mobile|remote|link to windows|redmi|xiaomi|samsung|huawei|oppo|vivo|oneplus|realme/i.test(
+              d.label,
+            ),
         );
         // Only use filtered list if we have at least one camera left
         if (filtered.length > 0) {
@@ -2129,12 +2132,16 @@ export default function App() {
       setDevices(video);
 
       if (preferIntegrated && video.length > 0) {
-        // Priority: integrated/built-in, then "user" facing, then first available
-        const integrated = video.find((d) =>
-          /integrated|built-in|facetime/i.test(d.label),
+        // Priority:
+        // 1. OV/Azurewave integrated cameras (common in laptops)
+        // 2. Built-in/Integrated/FaceTime labeled
+        // 3. "User" facing
+        // 4. First available
+        const ov = video.find((d) =>
+          /ov\d+|azurewave|integrated|built-in|facetime/i.test(d.label),
         );
         const userFacing = video.find((d) => /user|front/i.test(d.label));
-        const target = integrated || userFacing || video[0];
+        const target = ov || userFacing || video[0];
 
         if (target) setSelectedDeviceId(target.deviceId);
       }
@@ -3815,7 +3822,7 @@ export default function App() {
               value={selectedDeviceId}
               onChange={(e) => {
                 setSelectedDeviceId(e.target.value);
-                if (preferIntegrated) setPreferIntegrated(true);
+                if (preferIntegrated) setPreferIntegrated(false);
               }}
               style={{
                 background: "rgba(255,255,255,0.05)",
