@@ -512,6 +512,17 @@ select option {
   .video-layer {
     /* Changed to contain to avoid the zoom-in effect user complained about */
     object-fit: contain;
+    filter: brightness(0.9) contrast(1.1); /* Reduced complexity */
+    transform: scale(0.96);
+    transform-origin: center;
+    transform: translate(-50%, -50%);
+    z-index: 1;
+    pointer-events: none;
+    opacity: 0.5;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+    transform: scale(0.96);
+    
   }
 }
 .canvas-layer {
@@ -535,16 +546,29 @@ select option {
   left: 50%;
   transform: translateX(-50%);
   z-index: 100;
+  opacity: 0;
   visibility: hidden;
+  transition:
+    opacity 0.3s ease,
+    visibility 0.3s ease;
 }
 
 .desktop-only.flux-status-container {
   position: absolute;
   top: 90%;
   left: 50%;
-  transform: translate(-40%, 0%);
+  transform: translate(-50%, 0%);
   z-index: 100;
+  opacity: 0;
   visibility: hidden;
+  transition:
+    opacity 0.3s ease,
+    visibility 0.3s ease;
+}
+
+.flux-status-container.active {
+  opacity: 1;
+  visibility: visible;
 }
 
 .flux-indicator {

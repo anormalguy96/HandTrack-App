@@ -863,8 +863,9 @@ function getMapScale(
   const visualH = videoH * scale;
 
   // For contain/cover we need to center the active area
-  const offsetX = (visualW - canvasW) / 2;
-  const offsetY = (visualH - canvasH) / 2;
+  // [FIX] Ensure positive offsets
+  const offsetX = Math.max(0, (visualW - canvasW) / 2);
+  const offsetY = Math.max(0, (visualH - canvasH) / 2);
   return { scaleX: scale, scaleY: scale, offsetX, offsetY };
 }
 
@@ -1037,6 +1038,7 @@ export default function App() {
     'Try: "Flux change color to red", "Flux change the thickness to 12", "Flux glow off", "Flux export".',
   );
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isListening, setIsListening] = useState(false);
 
   // New UI States
   const [brushColor, setBrushColor] = useState(settingsRef.current.brushColor);
@@ -1267,12 +1269,13 @@ export default function App() {
     const { w, h } = getVisualRect(v);
     if (!w || !h) return;
 
-    // Mobile: force portrait aspect (canvas fills screen or 9:16 constraint)
-    const mobile = mobileCached;
+    // [FIX] Use screen width to detect mobile layout instead of User Agent
+    // This matches the CSS media query (max-width: 1024px)
+    const isMobileLayout = window.innerWidth <= 1024;
     let targetW = w;
     let targetH = h;
 
-    if (mobile) {
+    if (isMobileLayout) {
       // Force match window size for "Cover" effect
       targetW = window.innerWidth;
       targetH = window.innerHeight;
@@ -1339,8 +1342,8 @@ export default function App() {
     const buffer = bufferCanvasRef.current;
     if (!canvas || !buffer) return;
 
-    const bctx = buffer.getContext("2d")!;
-    const ctx = canvas.getContext("2d")!;
+    const bctx = buffer.getContext("2d", { willReadFrequently: true })!;
+    const ctx = canvas.getContext("2d", { alpha: true })!;
 
     bctx.clearRect(0, 0, buffer.width, buffer.height);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -1380,6 +1383,13 @@ export default function App() {
       };
       strokesRef.current.push(s); // ✅ no spread
       strokeByIdRef.current.set(s.id, s); // ✅ fast lookup
+
+      // [RAM] Limit Undo stack
+      if (strokesRef.current.length > 50) {
+        const removed = strokesRef.current.shift();
+        if (removed) strokeByIdRef.current.delete(removed.id);
+      }
+
       return s.id;
     },
     [],
@@ -2050,7 +2060,14 @@ export default function App() {
       }
 
       // STRICT EXPORT COMMANDS
-      if (t.includes("export") || t.includes("share") || t.includes("send") || t.includes("share to") || t.includes("save to") || t.includes("export to")) {
+      if (
+        t.includes("export") ||
+        t.includes("share") ||
+        t.includes("send") ||
+        t.includes("share to") ||
+        t.includes("save to") ||
+        t.includes("export to")
+      ) {
         if (
           textMatches(t, [
             "whatsapp",
@@ -2146,7 +2163,12 @@ export default function App() {
         speak("Welli thank you");
         return;
       }
-      if (t.includes("hello") || t.includes("hi") || t.includes("hi there") || t.includes("hi there.")) {
+      if (
+        t.includes("hello") ||
+        t.includes("hi") ||
+        t.includes("hi there") ||
+        t.includes("hi there.")
+      ) {
         speak("Hello! How can I help you?");
         return;
       }
@@ -2154,7 +2176,12 @@ export default function App() {
         speak("Goodbye! Have a great day!");
         return;
       }
-      if (t.includes("how are you") || t.includes("wassup") || t.includes("how you doing?") || t.includes("how you doing?")) {
+      if (
+        t.includes("how are you") ||
+        t.includes("wassup") ||
+        t.includes("how you doing?") ||
+        t.includes("how you doing?")
+      ) {
         speak("I'm doing great, thank you! How about you?");
         return;
       }
@@ -2173,10 +2200,7 @@ export default function App() {
         return;
       }
 
-      if (
-        t.includes("remove") ||
-        t.includes("delete")
-      ) {
+      if (t.includes("remove") || t.includes("delete")) {
         if (
           t.includes("all") ||
           t.includes("canvas") ||
@@ -2287,6 +2311,13 @@ export default function App() {
         }
       }
 
+      if (
+        t.includes("reset") &&
+        (t.includes("voice") || t.includes("system"))
+      ) {
+        return voiceSystemReset();
+      }
+
       speak("Command not recognized.");
     },
     [
@@ -2301,7 +2332,7 @@ export default function App() {
     ],
   );
 
-  const resetVoice = useCallback(() => {
+  const voiceSystemReset = useCallback(() => {
     try {
       speechRecRef.current?.abort();
     } catch {}
@@ -2367,10 +2398,12 @@ export default function App() {
     rec.onstart = () => {
       setVoiceHint('Mic active. Try "brush red" or "glow off".');
       console.log("[Voice] Started.");
+      setIsListening(true);
     };
 
     rec.onend = () => {
       console.log("[Voice] Ended.");
+      setIsListening(false);
       // [FIX] Removed auto-restart. VAD will restart it when sound is detected.
     };
 
@@ -2380,7 +2413,14 @@ export default function App() {
         setVoiceHint("Mic blocked. Click Mic once to allow.");
       else if (e.error !== "no-speech") setVoiceHint(`Voice error: ${e.error}`);
     };
-    return rec;
+
+    // [RAM] cleanup on unmount to prevent leaks
+    return () => {
+      try {
+        rec.stop();
+        rec.abort();
+      } catch {}
+    };
   }, []);
 
   /* ------------------------------ camera + model boot ------------------------------ */
@@ -3433,12 +3473,13 @@ export default function App() {
 
           const { w: vW, h: vH } = getVisualRect(v);
 
+          const isMobileLayout = window.innerWidth <= 1024;
           const map = getMapScale(
             v.videoWidth,
             v.videoHeight,
             vW,
             vH,
-            mobileCached ? "contain" : "fill",
+            isMobileLayout ? "contain" : "fill",
           );
 
           // Reset point pool for this frame
@@ -4420,14 +4461,18 @@ export default function App() {
           The Canvas Wrapper is shared. But on Mobile it's absolute. On desktop it's in the grid.
       */}
       {/* Voice Status Indicator (Shared) */}
-      <div className="flux-status-container mobile-only">
+      <div
+        className={`flux-status-container mobile-only ${isSpeaking || isListening ? "active" : ""}`}
+      >
         <div className={`flux-indicator ${isSpeaking ? "speaking" : ""}`} />
       </div>
 
       <div
         className={`canvas-wrapper ${tracksRef.current.length > 0 ? "visible" : ""}`}
       >
-        <div className="flux-status-container desktop-only">
+        <div
+          className={`flux-status-container desktop-only ${isSpeaking || isListening ? "active" : ""}`}
+        >
           <div className={`flux-indicator ${isSpeaking ? "speaking" : ""}`} />
         </div>
         <video
