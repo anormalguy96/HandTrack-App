@@ -3815,7 +3815,7 @@ export default function App() {
               value={selectedDeviceId}
               onChange={(e) => {
                 setSelectedDeviceId(e.target.value);
-                if (preferIntegrated) setPreferIntegrated(false);
+                if (preferIntegrated) setPreferIntegrated(true);
               }}
               style={{
                 background: "rgba(255,255,255,0.05)",
