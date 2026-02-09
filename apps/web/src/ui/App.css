@@ -542,7 +542,7 @@ select option {
   position: absolute;
   top: 90%;
   left: 50%;
-  transform: translate(-50%, 0%);
+  transform: translate(-40%, 0%);
   z-index: 100;
   visibility: hidden;
 }
