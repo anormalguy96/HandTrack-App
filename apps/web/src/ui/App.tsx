@@ -1005,7 +1005,8 @@ export default function App() {
     eraserMode: false, // New eraser mode (Type 2)
 
     inferPreset: "FAST" as InferencePreset,
-    inferFpsCap: 24,
+    // [OPT] Lower cap for mobile to save battery/heat
+    inferFpsCap: window.innerWidth <= 1024 ? 20 : 24,
     maxHands: 4,
 
     oneEuroMinCutoff: 0.9,
@@ -1457,6 +1458,14 @@ export default function App() {
       strokesRef.current.push(back);
       strokeByIdRef.current.set(back.id, back);
       bakedCountRef.current = 0; // Force re-bake
+
+      // [RAM] Consistency check
+      if (strokesRef.current.length > 50) {
+        strokesRef.current.shift();
+      }
+
+      needsFullRedrawRef.current = true;
+      speak("Redo.");
       needsFullRedrawRef.current = true;
       speak("Redo.");
     }
@@ -2423,8 +2432,18 @@ export default function App() {
     };
   }, []);
 
+  // [FIX] Initialize Speech Recognition
+  useEffect(() => {
+    if (voiceOn && !speechRecRef.current) {
+      const rec = setupSpeechRecognition();
+      if (rec) {
+        speechRecRef.current = rec;
+      }
+    }
+  }, [voiceOn, setupSpeechRecognition]);
+
   /* ------------------------------ camera + model boot ------------------------------ */
-  const mobileCached = useMemo(() => isMobile(), []);
+  const mobileCached = useMemo(() => window.innerWidth <= 1024, []);
 
   const updateDevices = useCallback(async () => {
     try {

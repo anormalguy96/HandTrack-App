@@ -342,16 +342,12 @@ select option {
     bottom: calc(20px + env(safe-area-inset-bottom));
     left: 20px;
     z-index: 30;
-    transform: scale(0.92);
-    transform-origin: bottom left;
   }
   .corner-br {
     position: absolute;
     bottom: calc(20px + env(safe-area-inset-bottom));
     right: 20px;
     z-index: 30;
-    transform: scale(0.92);
-    transform-origin: bottom right;
   }
 
   /* --- Speaking Indicator --- */
@@ -407,8 +403,8 @@ select option {
 }
 
 .flux-logo {
-  width: 90px; /* Reduced from 120 for mobile fit */
-  height: 90px;
+  width: 60px; /* Reduced from 90px */
+  height: 60px;
   border: 3px solid var(--accent);
   border-radius: 50%;
   position: relative;
@@ -426,7 +422,7 @@ select option {
 
 .mobile-logo-fixed {
   position: absolute;
-  bottom: calc(20px + env(safe-area-inset-bottom));
+  bottom: calc(50px + env(safe-area-inset-bottom));
   left: 50%;
   transform: translateX(-50%);
   z-index: 100;
@@ -512,6 +508,10 @@ select option {
 @media (max-width: 1024px) {
   .video-layer {
     object-fit: cover;
+    transform: scale(0.96);
+    transform-origin: center;
+    border-radius: 20px; /* Nice touch for scaled view */
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5); /* Depth */
   }
 }
 .canvas-layer {
@@ -520,6 +520,12 @@ select option {
   width: 100%;
   height: 100%;
   pointer-events: none;
+}
+@media (max-width: 1024px) {
+  .canvas-layer {
+    transform: scale(0.96);
+    transform-origin: center;
+  }
 }
 
 .flux-status-container {
@@ -531,7 +537,7 @@ select option {
 
 .mobile-only.flux-status-container {
   position: absolute;
-  bottom: calc(32px + env(safe-area-inset-bottom));
+  bottom: calc(50px + env(safe-area-inset-bottom));
   left: 50%;
   transform: translateX(-50%);
   z-index: 100;
@@ -561,8 +567,8 @@ select option {
 }
 
 .flux-indicator {
-  width: 48px;
-  height: 48px;
+  width: 40px;
+  height: 40px;
   background: rgba(51, 51, 68, 0.4);
   border-radius: 50%;
   transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
