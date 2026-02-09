@@ -803,7 +803,7 @@ function getMapScale(
   videoH: number,
   canvasW: number,
   canvasH: number,
-  objectFit: "fill" | "cover" = "fill",
+  objectFit: "fill" | "cover" | "contain" = "fill",
 ) {
   if (objectFit === "fill") {
     return {
@@ -813,7 +813,10 @@ function getMapScale(
       offsetY: 0,
     };
   }
-  const scale = Math.max(canvasW / videoW, canvasH / videoH);
+  const scale =
+    objectFit === "cover"
+      ? Math.max(canvasW / videoW, canvasH / videoH)
+      : Math.min(canvasW / videoW, canvasH / videoH);
   const visualW = videoW * scale;
   const visualH = videoH * scale;
   const offsetX = (visualW - canvasW) / 2;
@@ -1623,11 +1626,18 @@ export default function App() {
         await copyToClipboard();
         setTimeout(() => {
           let url = "";
-          if (target === "whatsapp") url = "https://wa.me/";
-          else if (target === "instagram") url = "https://www.instagram.com/";
+          const msg = encodeURIComponent(
+            "Check out my hand tracking art! Made with Tensor Studio.",
+          );
+          if (target === "whatsapp") {
+            url = mobileCached
+              ? `whatsapp://send?text=${msg}`
+              : `https://wa.me/?text=${msg}`;
+          } else if (target === "instagram") url = "https://www.instagram.com/";
           else if (target === "tiktok") url = "https://www.tiktok.com/";
           else if (target === "facebook") url = "https://www.facebook.com/";
-          else if (target === "x") url = "https://twitter.com/intent/tweet";
+          else if (target === "x")
+            url = `https://twitter.com/intent/tweet?text=${msg}`;
 
           if (url) window.open(url, "_blank");
         }, 500);
@@ -2104,19 +2114,14 @@ export default function App() {
   }, []);
 
   /* ------------------------------ camera + model boot ------------------------------ */
-  const isMobile = useCallback(() => {
-    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-      navigator.userAgent,
-    );
-  }, []);
+  const mobileCached = useMemo(() => isMobile(), []);
 
   const updateDevices = useCallback(async () => {
     try {
       const all = await navigator.mediaDevices.enumerateDevices();
       let video = all.filter((d) => d.kind === "videoinput");
 
-      // On desktop, filter out phone/remote cameras
-      if (!isMobile()) {
+      if (!mobileCached) {
         const filtered = video.filter(
           (d) =>
             !/phone|mobile|remote|link to windows|redmi|xiaomi|samsung|huawei|oppo|vivo|oneplus|realme/i.test(
@@ -3039,7 +3044,7 @@ export default function App() {
             v.videoHeight,
             W,
             H,
-            isMobile() ? "cover" : "fill",
+            mobileCached ? "contain" : "fill",
           );
 
           // Helper for mapping
@@ -3246,7 +3251,12 @@ export default function App() {
         needsFullRedrawRef.current = false;
         fullRedraw();
       }
-      renderOverlay(faceResultsRef.current);
+
+      // Throttle overlay rendering to 60fps
+      if (now - (loop as any)._lastRender >= 16) {
+        (loop as any)._lastRender = now;
+        renderOverlay(faceResultsRef.current);
+      }
 
       if (now - lastHudTs > 250) {
         lastHudTs = now;
@@ -3255,6 +3265,7 @@ export default function App() {
 
       requestAnimationFrame(loop);
     };
+    (loop as any)._lastRender = 0;
 
     requestAnimationFrame(loop);
     return () => {
@@ -3633,13 +3644,19 @@ export default function App() {
         </div>
 
         <div className="card">
+          <div
+            className="label-row"
+            style={{ fontWeight: 900, color: theme.fg }}
+          >
+            Export & Share
+          </div>
           <div className="tool-grid" style={{ gridTemplateColumns: "1fr 1fr" }}>
             <button
               className="btn btn-primary"
               onClick={() => void downloadPng()}
               style={{ gap: 6 }}
             >
-              <Icons.Export /> PNG
+              <Icons.Save /> Save PNG
             </button>
             <button
               className="btn btn-primary"
@@ -3647,6 +3664,39 @@ export default function App() {
               style={{ gap: 6 }}
             >
               <Icons.Share /> Share
+            </button>
+          </div>
+          <div style={{ height: 12 }} />
+          <div
+            className="tool-grid"
+            style={{ gridTemplateColumns: "repeat(4, 1fr)" }}
+          >
+            <button
+              className="btn icon-only"
+              style={{ color: "#25D366" }}
+              onClick={() => void sharePng("whatsapp")}
+            >
+              <Icons.WhatsApp />
+            </button>
+            <button
+              className="btn icon-only"
+              style={{ color: "#E1306C" }}
+              onClick={() => void sharePng("instagram")}
+            >
+              <Icons.Instagram />
+            </button>
+            <button
+              className="btn icon-only"
+              style={{ color: "#1877F2" }}
+              onClick={() => void sharePng("facebook")}
+            >
+              <Icons.Facebook />
+            </button>
+            <button
+              className="btn icon-only"
+              onClick={() => void sharePng("x")}
+            >
+              <Icons.Twitter />
             </button>
           </div>
         </div>
@@ -3853,9 +3903,20 @@ export default function App() {
       <div
         className={`canvas-wrapper ${tracksRef.current.length > 0 ? "visible" : ""}`}
       >
-        <video ref={videoRef} className="video-layer" muted playsInline />
-        <canvas ref={drawRef} className="canvas-layer" />
-        <canvas ref={overlayRef} className="canvas-layer" />
+        <video
+          ref={videoRef}
+          className={`video-layer ${facingMode === "user" ? "mirrored" : ""}`}
+          muted
+          playsInline
+        />
+        <canvas
+          ref={drawRef}
+          className={`canvas-layer ${facingMode === "user" ? "mirrored" : ""}`}
+        />
+        <canvas
+          ref={overlayRef}
+          className={`canvas-layer ${facingMode === "user" ? "mirrored" : ""}`}
+        />
         <canvas ref={inferCanvasRef} style={{ display: "none" }} />
         {!ready && (
           <div
