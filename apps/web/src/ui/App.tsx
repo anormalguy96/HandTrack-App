@@ -3592,13 +3592,7 @@ export default function App() {
           >
             Tools
           </div>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr 1fr",
-              gap: 8,
-            }}
-          >
+          <div className="tool-grid">
             <button className="btn" title="Undo" onClick={undo}>
               <Icons.Undo />
             </button>
@@ -3632,9 +3626,7 @@ export default function App() {
         </div>
 
         <div className="card">
-          <div
-            style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}
-          >
+          <div className="tool-grid" style={{ gridTemplateColumns: "1fr 1fr" }}>
             <button
               className="btn btn-primary"
               onClick={() => void downloadPng()}
