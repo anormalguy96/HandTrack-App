@@ -342,12 +342,16 @@ select option {
     bottom: calc(20px + env(safe-area-inset-bottom));
     left: 20px;
     z-index: 30;
+    transform: scale(0.92);
+    transform-origin: bottom left;
   }
   .corner-br {
     position: absolute;
     bottom: calc(20px + env(safe-area-inset-bottom));
     right: 20px;
     z-index: 30;
+    transform: scale(0.92);
+    transform-origin: bottom right;
   }
 
   /* --- Speaking Indicator --- */

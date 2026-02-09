@@ -2485,16 +2485,25 @@ export default function App() {
       const idealW = mobileCached ? 720 : 1280;
       const idealH = mobileCached ? 1280 : 720;
 
-      const constraints: MediaStreamConstraints = {
-        video: {
-          width: { ideal: mobileCached ? 720 : 1280 },
-          height: { ideal: mobileCached ? 1280 : 720 },
-          aspectRatio: {
-            ideal: mobileCached ? 9 / 16 : 16 / 9,
-          },
-        },
-        audio: false,
-      };
+      let constraints: MediaStreamConstraints = { audio: false };
+
+      if (mobileCached) {
+        // [MOBILE] Strict Portrait Mode
+        // We explicitly ask for Height > Width to force the hardware into portrait mode if available.
+        // We do NOT set aspectRatio because some browsers/drivers prioritize it over W/H or get confused.
+        constraints.video = {
+          width: { min: 720, ideal: 1080, max: 1440 },
+          height: { min: 1280, ideal: 1920, max: 2560 },
+          facingMode: "user", // Usually implies portrait on phones
+        };
+      } else {
+        // [DESKTOP] Landscape
+        constraints.video = {
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          aspectRatio: { ideal: 16 / 9 },
+        };
+      }
 
       if (selectedDeviceId) {
         (constraints.video as MediaTrackConstraints).deviceId = {
