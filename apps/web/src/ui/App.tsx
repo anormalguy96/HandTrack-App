@@ -793,7 +793,11 @@ const Icons = {
       strokeLinejoin="round"
     >
       <circle cx="12" cy="12" r="3" />
-      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    </svg>
+  ),
+  TikTok: () => (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z" />
     </svg>
   ),
 };
@@ -1622,51 +1626,61 @@ export default function App() {
       const blob = await exportBlobMirrored();
       if (!blob) return;
 
+      const file = new File([blob], `tensor_art_${Date.now()}.png`, {
+        type: "image/png",
+      });
+      const msg = "Check out my hand tracking art! Made with Tensor Studio.";
+      const nav = navigator as any;
+
+      // Try native share with file first
+      if (!target && nav.canShare && nav.canShare({ files: [file] })) {
+        try {
+          await nav.share({
+            files: [file],
+            title: "Tensor Studio",
+            text: msg,
+          });
+          speak("Shared!");
+          return;
+        } catch (err: any) {
+          if (err.name === "AbortError") return;
+          console.warn("Native share failed:", err);
+        }
+      }
+
+      // Platform-specific sharing
       if (target) {
+        // Copy image to clipboard first
         await copyToClipboard();
+
         setTimeout(() => {
           let url = "";
-          const msg = encodeURIComponent(
-            "Check out my hand tracking art! Made with Tensor Studio.",
-          );
+          const encodedMsg = encodeURIComponent(msg);
+
           if (target === "whatsapp") {
             url = mobileCached
-              ? `whatsapp://send?text=${msg}`
-              : `https://wa.me/?text=${msg}`;
-          } else if (target === "instagram") url = "https://www.instagram.com/";
-          else if (target === "tiktok") url = "https://www.tiktok.com/";
-          else if (target === "facebook") url = "https://www.facebook.com/";
-          else if (target === "x")
-            url = `https://twitter.com/intent/tweet?text=${msg}`;
+              ? `whatsapp://send?text=${encodedMsg}`
+              : `https://wa.me/?text=${encodedMsg}`;
+          } else if (target === "instagram") {
+            url = "https://www.instagram.com/";
+          } else if (target === "tiktok") {
+            url = "https://www.tiktok.com/upload";
+          } else if (target === "facebook") {
+            url = "https://www.facebook.com/";
+          } else if (target === "x") {
+            url = `https://twitter.com/intent/tweet?text=${encodedMsg}`;
+          }
 
-          if (url) window.open(url, "_blank");
+          if (url) {
+            window.open(url, "_blank");
+            speak(`Opening ${target}. Paste to share!`);
+          }
         }, 500);
         return;
       }
 
-      const file = new File([blob], `neon_export_${Date.now()}.png`, {
-        type: "image/png",
-      });
-      const nav = navigator as any;
-
-      try {
-        if (nav.canShare?.({ files: [file] }) && nav.share) {
-          await nav.share({
-            title: "Neon Studio",
-            text: "Made with Neon Studio",
-            files: [file],
-          });
-          speak("Sharing...");
-        } else {
-          await downloadPng();
-          setVoiceHint("Native sharing unavailable; downloaded instead.");
-        }
-      } catch (e: any) {
-        if (e.name !== "AbortError") {
-          setVoiceHint("Share failed. Try Export PNG.");
-          await downloadPng();
-        }
-      }
+      // Fallback: download
+      await downloadPng();
     },
     [copyToClipboard, downloadPng, exportBlobMirrored, speak],
   );
@@ -2171,16 +2185,9 @@ export default function App() {
 
       console.log("[startCamera] Requesting getUserMedia...");
 
-      // [FIX] FOV Crop fix: Laptops use Landscape 16:9, Mobile uses Portrait 9:16
-      const mobile = isMobile();
-      const isPortraitWindow = window.innerHeight > window.innerWidth;
-
-      // On desktop/laptop, we almost always want landscape to avoid sensor cropping (FOV loss)
-      // unless the user specifies otherwise or it's a very specific mobile-like tablet.
-      const usePortrait = mobile && isPortraitWindow;
-
-      const idealW = usePortrait ? 720 : 1280;
-      const idealH = usePortrait ? 1280 : 720;
+      // Mobile always uses portrait, desktop uses landscape
+      const idealW = mobileCached ? 720 : 1280;
+      const idealH = mobileCached ? 1280 : 720;
 
       const constraints: MediaStreamConstraints = {
         video: {
@@ -3483,11 +3490,6 @@ export default function App() {
           </div>
         )}
 
-        {/* Start Indicator */}
-        <div className="tensor-status-container">
-          <div className={`tensor-indicator ${isSpeaking ? "speaking" : ""}`} />
-        </div>
-
         {/* Left Stack */}
         <div className="stack-left">
           <button className="btn icon-only" onClick={undo}>
@@ -3516,6 +3518,24 @@ export default function App() {
           >
             <Icons.Copy />
           </button>
+          <button
+            className={`btn icon-only ${voiceOn ? "btn-primary" : ""}`}
+            onClick={() => setVoiceOn(!voiceOn)}
+          >
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+              <line x1="12" y1="19" x2="12" y2="23" />
+              <line x1="8" y1="23" x2="16" y2="23" />
+            </svg>
+          </button>
         </div>
 
         {/* Right Stack */}
@@ -3543,6 +3563,13 @@ export default function App() {
           </button>
           <button className="btn icon-only" onClick={() => void sharePng("x")}>
             <Icons.Twitter />
+          </button>
+          <button
+            className="btn icon-only"
+            style={{ color: "#00F2EA" }}
+            onClick={() => void sharePng("tiktok")}
+          >
+            <Icons.TikTok />
           </button>
           <button className="btn icon-only" onClick={() => void sharePng()}>
             <Icons.Share />
@@ -3698,6 +3725,13 @@ export default function App() {
             >
               <Icons.Twitter />
             </button>
+            <button
+              className="btn icon-only"
+              style={{ color: "#00F2EA" }}
+              onClick={() => void sharePng("tiktok")}
+            >
+              <Icons.TikTok />
+            </button>
           </div>
         </div>
 
@@ -3815,6 +3849,49 @@ export default function App() {
             className="label-row"
             style={{ fontWeight: 900, color: theme.fg }}
           >
+            Voice Control
+          </div>
+          <button
+            className={`btn ${voiceOn ? "btn-primary" : ""}`}
+            onClick={() => setVoiceOn(!voiceOn)}
+            style={{ width: "100%", gap: 8 }}
+          >
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+              <line x1="12" y1="19" x2="12" y2="23" />
+              <line x1="8" y1="23" x2="16" y2="23" />
+            </svg>
+            {voiceOn ? "Voice ON" : "Voice OFF"}
+          </button>
+          {voiceOn && (
+            <div
+              style={{
+                marginTop: 12,
+                padding: 12,
+                background: "rgba(105, 240, 174, 0.1)",
+                borderRadius: 8,
+                fontSize: 11,
+                color: theme.muted,
+              }}
+            >
+              {voiceHint}
+            </div>
+          )}
+        </div>
+
+        <div className="card">
+          <div
+            className="label-row"
+            style={{ fontWeight: 900, color: theme.fg }}
+          >
             System Config
           </div>
           <div className="label-row">
@@ -3900,6 +3977,11 @@ export default function App() {
           The Plan said "Refactor JSX to use explicit mobile-layout and desktop-layout".
           The Canvas Wrapper is shared. But on Mobile it's absolute. On desktop it's in the grid.
       */}
+      {/* Voice Status Indicator (Shared) */}
+      <div className="tensor-status-container">
+        <div className={`tensor-indicator ${isSpeaking ? "speaking" : ""}`} />
+      </div>
+
       <div
         className={`canvas-wrapper ${tracksRef.current.length > 0 ? "visible" : ""}`}
       >
