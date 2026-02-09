@@ -821,11 +821,19 @@ function getMapScale(
     objectFit === "cover"
       ? Math.max(canvasW / videoW, canvasH / videoH)
       : Math.min(canvasW / videoW, canvasH / videoH);
+
   const visualW = videoW * scale;
   const visualH = videoH * scale;
+
+  // For contain/cover we need to center the active area
   const offsetX = (visualW - canvasW) / 2;
   const offsetY = (visualH - canvasH) / 2;
   return { scaleX: scale, scaleY: scale, offsetX, offsetY };
+}
+
+function getVisualRect(el: HTMLElement) {
+  const r = el.getBoundingClientRect();
+  return { w: r.width, h: r.height };
 }
 
 /* ------------------------------- Main Component --------------------------- */
@@ -842,10 +850,12 @@ export default function App() {
   const [faceLandmarker, setFaceLandmarker] = useState<FaceLandmarker | null>(
     null,
   ); // [NEW] Ref for face
-  const [arItems, setArItems] = useState<{ hat: boolean; glasses: boolean }>({
+  const [arItems, setArItems] = useState<{ hat: boolean; glasses: boolean;beard: boolean;mustache: boolean }>({ // [NEW] AR State
     hat: false,
     glasses: false,
-  }); // [NEW] AR State
+    mustache: false,
+    beard: false,
+  });
 
   const theme = useMemo(
     () => ({
@@ -1166,9 +1176,7 @@ export default function App() {
     const draw = drawRef.current;
     const ov = overlayRef.current;
     if (!v || !draw || !ov) return;
-
-    const w = v.videoWidth;
-    const h = v.videoHeight;
+    const { w, h } = getVisualRect(v);
     if (!w || !h) return;
 
     // Mobile: force portrait aspect (canvas fills screen or 9:16 constraint)
@@ -1623,28 +1631,30 @@ export default function App() {
 
   const sharePng = useCallback(
     async (target?: "whatsapp" | "instagram" | "tiktok" | "facebook" | "x") => {
-      const blob = await exportBlobMirrored();
-      if (!blob) return;
-
-      const file = new File([blob], `tensor_art_${Date.now()}.png`, {
-        type: "image/png",
-      });
       const msg = "Check out my hand tracking art! Made with Tensor Studio.";
       const nav = navigator as any;
 
-      // Try native share with file first
-      if (!target && nav.canShare && nav.canShare({ files: [file] })) {
+      // Native file sharing (Attach PNG)
+      if (navigator.share && navigator.canShare) {
         try {
-          await nav.share({
-            files: [file],
-            title: "Tensor Studio",
-            text: msg,
+          const blob = await exportBlobMirrored();
+          if (!blob) throw new Error("No blob generated");
+          const file = new File([blob], `tensor_art_${Date.now()}.png`, {
+            type: "image/png",
           });
-          speak("Shared!");
-          return;
+
+          if (navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              files: [file],
+              title: "Tensor Studio",
+              text: msg,
+            });
+            speak("Shared!");
+            return;
+          }
         } catch (err: any) {
           if (err.name === "AbortError") return;
-          console.warn("Native share failed:", err);
+          console.warn("Native file share failed:", err);
         }
       }
 
@@ -1877,19 +1887,32 @@ export default function App() {
 
       // STRICT EXPORT COMMANDS
       if (t.includes("export") || t.includes("share") || t.includes("send")) {
-        if (textMatches(t, ["whatsapp"])) return void sharePng("whatsapp");
-        if (textMatches(t, ["instagram", "insta"]))
+        if (textMatches(t, ["whatsapp", "whats app", "what's up", "what's app", "wassup"])) {
+          speak("Sharing to WhatsApp...");
+          return void sharePng("whatsapp");
+        }
+        if (textMatches(t, ["instagram", "insta"])) {
+          speak("Sharing to Instagram...");
           return void sharePng("instagram");
-        if (textMatches(t, ["tiktok", "tic toc"]))
+        }
+        if (textMatches(t, ["tiktok", "tic toc", "tik tok", "tick tock", "teek tuck", "teek tok", "tick tuck"])) {
+          speak("Sharing to TikTok...");
           return void sharePng("tiktok");
-        if (textMatches(t, ["facebook", "fb"]))
+        }
+        if (textMatches(t, ["facebook", "fb"])) {
+          speak("Sharing to Facebook...");
           return void sharePng("facebook");
-        if (textMatches(t, ["twitter", "x.com"])) return void sharePng("x");
+        }
+        if (textMatches(t, ["twitter", "x.com", "tweet", "x", "ex", "ex.com"])) {
+          speak("Sharing to X...");
+          return void sharePng("x");
+        }
 
         if (
           t.includes("png") ||
           t.includes("file") ||
           t.includes("download") ||
+          t.includes("save") ||
           t.includes("image")
         )
           return void downloadPng();
@@ -2196,8 +2219,9 @@ export default function App() {
 
       const constraints: MediaStreamConstraints = {
         video: {
-          width: { ideal: idealW },
-          height: { ideal: idealH },
+          width: { ideal: mobileCached ? 720 : 1280 },
+          height: { ideal: mobileCached ? 1280 : 720 },
+          aspectRatio: { ideal: mobileCached ? 9 / 16 : 16 / 9 },
         },
         audio: false,
       };
@@ -2726,6 +2750,84 @@ export default function App() {
 
           ctx.restore();
         }
+
+        // Beard
+        if (arItems.beard) {
+          const forehead = get(10); // Top of head
+          const chin = get(152);
+          const headHeight = dist(forehead, chin);
+          const center = { x: forehead.x, y: forehead.y - headHeight * 0.3 };
+          const size = headHeight * 1.5;
+
+          ctx.save();
+          ctx.translate(center.x, center.y);
+          // Angle from chin to forehead
+          const angle =
+            Math.atan2(forehead.y - chin.y, forehead.x - chin.x) + Math.PI / 2;
+          ctx.rotate(angle);
+
+          // Draw Cyber Beard
+          ctx.fillStyle = theme.accent;
+          ctx.strokeStyle = "#fff";
+          ctx.lineWidth = 3;
+
+          ctx.beginPath();
+          ctx.moveTo(-size / 2, 0); // Brim L
+          ctx.lineTo(size / 2, 0); // Brim R
+          ctx.lineTo(size / 3, -size / 2); // Top R
+          ctx.lineTo(-size / 3, -size / 2); // Top L
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+
+          // Neon Glow line
+          ctx.beginPath();
+          ctx.strokeStyle = "#0ff";
+          ctx.moveTo(-size / 3, -size / 4);
+          ctx.lineTo(size / 3, -size / 4);
+          ctx.stroke();
+
+          ctx.restore();
+        }
+
+        // Mustache
+        if (arItems.mustache) {
+          const nose = get(4);
+          const chin = get(152);
+          const headHeight = dist(nose, chin);
+          const center = { x: nose.x, y: nose.y + headHeight * 0.2 };
+          const size = headHeight * 0.8;
+
+          ctx.save();
+          ctx.translate(center.x, center.y);
+          // Angle from chin to nose
+          const angle =
+            Math.atan2(nose.y - chin.y, nose.x - chin.x) + Math.PI / 2;
+          ctx.rotate(angle);
+
+          // Draw Cyber Mustache
+          ctx.fillStyle = theme.accent;
+          ctx.strokeStyle = "#fff";
+          ctx.lineWidth = 3;
+
+          ctx.beginPath();
+          ctx.moveTo(-size / 2, 0); // Brim L
+          ctx.lineTo(size / 2, 0); // Brim R
+          ctx.lineTo(size / 3, -size / 2); // Top R
+          ctx.lineTo(-size / 3, -size / 2); // Top L
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+
+          // Neon Glow line
+          ctx.beginPath();
+          ctx.strokeStyle = "#0ff";
+          ctx.moveTo(-size / 3, -size / 4);
+          ctx.lineTo(size / 3, -size / 4);
+          ctx.stroke();
+
+          ctx.restore();
+        }
       }
 
       // Drawing skeleton if enabled
@@ -3051,11 +3153,13 @@ export default function App() {
 
           const dets: HandDet[] = [];
 
+          const { w: vW, h: vH } = getVisualRect(v);
+
           const map = getMapScale(
             v.videoWidth,
             v.videoHeight,
-            W,
-            H,
+            vW,
+            vH,
             mobileCached ? "contain" : "fill",
           );
 
