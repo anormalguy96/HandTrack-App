@@ -3877,13 +3877,15 @@ export default function App() {
             <span>{loadingStep}</span>
           )}
           <button
-            className={`btn icon-only ${isSettingsRotating ? "rotate-360" : ""}`}
-            style={{ position: "absolute", right: 8, height: 28, width: 28 }}
-            onClick={() => {
-              setIsSettingsRotating(true);
-              setShowMobileSettings((v) => !v);
-              setTimeout(() => setIsSettingsRotating(false), 1000);
+            className={`btn icon-only ${showMobileSettings ? "rotate-90" : ""}`}
+            style={{
+              position: "absolute",
+              right: 8,
+              height: 28,
+              width: 28,
+              transition: "transform 0.4s ease",
             }}
+            onClick={() => setShowMobileSettings((v) => !v)}
           >
             <Icons.Settings />
           </button>
