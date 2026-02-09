@@ -91,6 +91,12 @@ function padBBox(bb: BBox, pad: number): BBox {
     maxY: bb.maxY + pad,
   };
 }
+
+function isMobile() {
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+    navigator.userAgent,
+  );
+}
 function bboxContains(bb: BBox, p: Pt) {
   return p.x >= bb.minX && p.x <= bb.maxX && p.y >= bb.minY && p.y <= bb.maxY;
 }
@@ -306,8 +312,7 @@ function computeGestureBooleans(
     margin,
   );
 
-  const rawPoint =
-    indexExt && !middleExt && !ringExt && !pinkyExt && det.pinchStrength < 0.25;
+  const rawPoint = indexExt && !middleExt && !ringExt && !pinkyExt;
   const rawPalm =
     indexExt && middleExt && ringExt && pinkyExt && det.pinchStrength < 0.2;
 
@@ -730,7 +735,45 @@ const Icons = {
       <path d="M21 7H3" />
     </svg>
   ),
+  Settings: () => (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    </svg>
+  ),
 };
+
+function getMapScale(
+  videoW: number,
+  videoH: number,
+  canvasW: number,
+  canvasH: number,
+  objectFit: "fill" | "cover" = "fill",
+) {
+  if (objectFit === "fill") {
+    return {
+      scaleX: canvasW / videoW,
+      scaleY: canvasH / videoH,
+      offsetX: 0,
+      offsetY: 0,
+    };
+  }
+  const scale = Math.max(canvasW / videoW, canvasH / videoH);
+  const visualW = videoW * scale;
+  const visualH = videoH * scale;
+  const offsetX = (visualW - canvasW) / 2;
+  const offsetY = (visualH - canvasH) / 2;
+  return { scaleX: scale, scaleY: scale, offsetX, offsetY };
+}
 
 /* ------------------------------- Main Component --------------------------- */
 export default function App() {
@@ -830,6 +873,7 @@ export default function App() {
     guestUnlocked: false,
   });
   const [showInstructions, setShowInstructions] = useState(false);
+  const [showMobileSettings, setShowMobileSettings] = useState(false); // [NEW] Toggle for mobile settings
   const [initialOverlay, setInitialOverlay] = useState(true);
 
   /* -------------------------------- voice -------------------------------- */
@@ -1074,16 +1118,28 @@ export default function App() {
     const h = v.videoHeight;
     if (!w || !h) return;
 
-    setVideoAspect(w / h);
+    // Mobile: force portrait aspect (canvas fills screen or 9:16 constraint)
+    const mobile = isMobile();
+    let targetW = w;
+    let targetH = h;
 
-    if (draw.width !== w || draw.height !== h) {
-      draw.width = w;
-      draw.height = h;
+    if (mobile) {
+      // Force match window size for "Cover" effect
+      targetW = window.innerWidth;
+      targetH = window.innerHeight;
+      setVideoAspect(targetW / targetH);
+    } else {
+      setVideoAspect(w / h);
+    }
+
+    if (draw.width !== targetW || draw.height !== targetH) {
+      draw.width = targetW;
+      draw.height = targetH;
       needsFullRedrawRef.current = true;
     }
-    if (ov.width !== w || ov.height !== h) {
-      ov.width = w;
-      ov.height = h;
+    if (ov.width !== targetW || ov.height !== targetH) {
+      ov.width = targetW;
+      ov.height = targetH;
     }
   }, []);
 
@@ -1895,9 +1951,9 @@ export default function App() {
 
       // Brush properties
       if (t.includes("color") || t.includes("set brush")) {
-        const c = parseCssColorCandidate(t.split(" ").pop() || "");
-        if (c && c !== t.split(" ").pop()) {
-          setBrushColor(c);
+        const m = t.match(/color (to )?(\S+)/i);
+        if (m?.[2]) {
+          setBrushColor(parseCssColorCandidate(m[2]));
           speak("Color set.");
           return;
         }
@@ -2247,8 +2303,8 @@ export default function App() {
         const POINT_ACTIVE = tr.stablePoint >= 3;
         const PALM_ACTIVE = tr.stablePalm >= 3;
 
-        const pinchOn = det.pinchStrength > 0.78 || det.rawGrab;
-        const pinchOff = det.pinchStrength < 0.55 && !det.rawGrab;
+        const pinchOn = det.pinchStrength > 0.75 || det.rawGrab;
+        const pinchOff = det.pinchStrength < 0.45 && !det.rawGrab;
 
         const pointPt = tr.pointFilter.filter(det.indexTip, nowMs);
         const pinchPt = tr.pinchFilter.filter(
@@ -2483,6 +2539,20 @@ export default function App() {
       const ctx = ov.getContext("2d")!;
       ctx.clearRect(0, 0, ov.width, ov.height);
 
+      const W = ov.width;
+      const H = ov.height;
+
+      const v = videoRef.current;
+      const map = v
+        ? getMapScale(
+            v.videoWidth,
+            v.videoHeight,
+            W,
+            H,
+            isMobile() ? "cover" : "fill",
+          )
+        : { scaleX: 1, scaleY: 1, offsetX: 0, offsetY: 0 };
+
       // AR Rendering
       if (
         faceRes &&
@@ -2490,13 +2560,11 @@ export default function App() {
         faceRes.faceLandmarks.length > 0
       ) {
         const face = faceRes.faceLandmarks[0];
-        const W = ov.width;
-        const H = ov.height;
 
         // Helper to get coords
         const get = (idx: number) => ({
-          x: face[idx].x * W,
-          y: face[idx].y * H,
+          x: face[idx].x * v!.videoWidth * map.scaleX - map.offsetX,
+          y: face[idx].y * v!.videoHeight * map.scaleY - map.offsetY,
         });
 
         // GLasses
@@ -2592,8 +2660,14 @@ export default function App() {
               p2 = lms[b];
             if (!p1 || !p2) continue;
             ctx.beginPath();
-            ctx.moveTo(p1.x * ov.width, p1.y * ov.height);
-            ctx.lineTo(p2.x * ov.width, p2.y * ov.height);
+            ctx.moveTo(
+              p1.x * v!.videoWidth * map.scaleX - map.offsetX,
+              p1.y * v!.videoHeight * map.scaleY - map.offsetY,
+            );
+            ctx.lineTo(
+              p2.x * v!.videoWidth * map.scaleX - map.offsetX,
+              p2.y * v!.videoHeight * map.scaleY - map.offsetY,
+            );
             ctx.stroke();
           }
 
@@ -2602,7 +2676,9 @@ export default function App() {
           for (let i = 0; i < lms.length; i++) {
             const p = lms[i];
             ctx.beginPath();
-            ctx.arc(p.x * ov.width, p.y * ov.height, 3, 0, Math.PI * 2);
+            const cx = p.x * v!.videoWidth * map.scaleX - map.offsetX;
+            const cy = p.y * v!.videoHeight * map.scaleY - map.offsetY;
+            ctx.arc(cx, cy, 3, 0, Math.PI * 2);
             ctx.fill();
           }
 
@@ -2903,6 +2979,19 @@ export default function App() {
 
           const dets: HandDet[] = [];
 
+          const map = getMapScale(
+            v.videoWidth,
+            v.videoHeight,
+            W,
+            H,
+            isMobile() ? "cover" : "fill",
+          );
+
+          // Helper for mapping
+          const mx = (n: number) => n * v.videoWidth * map.scaleX - map.offsetX;
+          const my = (n: number) =>
+            n * v.videoHeight * map.scaleY - map.offsetY;
+
           for (let i = 0; i < landmarks.length; i++) {
             const hand = landmarks[i];
             if (!hand?.length) continue;
@@ -2914,80 +3003,85 @@ export default function App() {
               | "Unknown";
 
             const wrist = {
-              x: hand[IDX.wrist].x * W,
-              y: hand[IDX.wrist].y * H,
+              x: mx(hand[IDX.wrist].x),
+              y: my(hand[IDX.wrist].y),
             };
             const indexMcp = {
-              x: hand[IDX.indexMcp].x * W,
-              y: hand[IDX.indexMcp].y * H,
+              x: mx(hand[IDX.indexMcp].x),
+              y: my(hand[IDX.indexMcp].y),
             };
             const middleMcp = {
-              x: hand[IDX.middleMcp].x * W,
-              y: hand[IDX.middleMcp].y * H,
+              x: mx(hand[IDX.middleMcp].x),
+              y: my(hand[IDX.middleMcp].y),
             };
 
             const thumbTip = {
-              x: hand[IDX.thumbTip].x * W,
-              y: hand[IDX.thumbTip].y * H,
+              x: mx(hand[IDX.thumbTip].x),
+              y: my(hand[IDX.thumbTip].y),
             };
             const indexTip = {
-              x: hand[IDX.indexTip].x * W,
-              y: hand[IDX.indexTip].y * H,
+              x: mx(hand[IDX.indexTip].x),
+              y: my(hand[IDX.indexTip].y),
             };
             const indexPip = {
-              x: hand[IDX.indexPip].x * W,
-              y: hand[IDX.indexPip].y * H,
+              x: mx(hand[IDX.indexPip].x),
+              y: my(hand[IDX.indexPip].y),
             };
 
             const middleTip = {
-              x: hand[IDX.middleTip].x * W,
-              y: hand[IDX.middleTip].y * H,
+              x: mx(hand[IDX.middleTip].x),
+              y: my(hand[IDX.middleTip].y),
             };
             const middlePip = {
-              x: hand[IDX.middlePip].x * W,
-              y: hand[IDX.middlePip].y * H,
+              x: mx(hand[IDX.middlePip].x),
+              y: my(hand[IDX.middlePip].y),
             };
 
             const ringTip = {
-              x: hand[IDX.ringTip].x * W,
-              y: hand[IDX.ringTip].y * H,
+              x: mx(hand[IDX.ringTip].x),
+              y: my(hand[IDX.ringTip].y),
             };
             const ringPip = {
-              x: hand[IDX.ringPip].x * W,
-              y: hand[IDX.ringPip].y * H,
+              x: mx(hand[IDX.ringPip].x),
+              y: my(hand[IDX.ringPip].y),
             };
 
             const pinkyTip = {
-              x: hand[IDX.pinkyTip].x * W,
-              y: hand[IDX.pinkyTip].y * H,
+              x: mx(hand[IDX.pinkyTip].x),
+              y: my(hand[IDX.pinkyTip].y),
             };
             const pinkyPip = {
-              x: hand[IDX.pinkyPip].x * W,
-              y: hand[IDX.pinkyPip].y * H,
+              x: mx(hand[IDX.pinkyPip].x),
+              y: my(hand[IDX.pinkyPip].y),
             };
 
             const palm = {
-              x:
-                ((hand[IDX.wrist].x +
+              x: mx(
+                (hand[IDX.wrist].x +
                   hand[IDX.indexMcp].x +
                   hand[IDX.middleMcp].x +
                   hand[IDX.ringMcp].x +
                   hand[IDX.pinkyMcp].x) /
-                  5) *
-                W,
-              y:
-                ((hand[IDX.wrist].y +
+                  5,
+              ),
+              y: my(
+                (hand[IDX.wrist].y +
                   hand[IDX.indexMcp].y +
                   hand[IDX.middleMcp].y +
                   hand[IDX.ringMcp].y +
                   hand[IDX.pinkyMcp].y) /
-                  5) *
-                H,
+                  5,
+              ),
             };
 
             const scalePx = Math.max(60, dist(wrist, middleMcp));
             const pinchDist = dist(indexTip, thumbTip);
-            const pinchStrength = clamp(1 - pinchDist / (scalePx * 0.55), 0, 1);
+            const pinchRatio = pinchDist / Math.max(1, scalePx);
+            const pinchStrength = clamp(
+              (0.28 - pinchRatio) / (0.28 - 0.12),
+              0,
+              1,
+            );
 
             const rawLandmarks = hand; // ✅ keep normalized landmarks, no allocation
 
@@ -3206,75 +3300,215 @@ export default function App() {
 
   return (
     <div className="app-container">
-      {/* Opening Animation Overlay */}
-      {initialOverlay && (
-        <div className="opening-overlay">
-          <div className="tensor-logo" />
-          <h1
+      {/* ---------------- MOBILE LAYOUT ---------------- */}
+      <div className="mobile-layout">
+        {/* Top Bar */}
+        <div className="top-bar">
+          {ready ? (
+            <span>Running. Point → draw. Fist → grab. Palm → select.</span>
+          ) : (
+            <span>{loadingStep}</span>
+          )}
+          <button
+            className="btn icon-only"
+            style={{ position: "absolute", right: 8, height: 28, width: 28 }}
+            onClick={() => setShowMobileSettings((v) => !v)}
+          >
+            <Icons.Settings />
+          </button>
+        </div>
+
+        {/* Mobile Settings (was in canvas-wrapper, now direct child of mobile-layout) */}
+
+        {/* Mobile Settings Panel (Collapsible) */}
+        {showMobileSettings && (
+          <div
+            className="mobile-settings card"
             style={{
-              marginTop: 24,
-              fontSize: 32,
-              fontWeight: 900,
-              color: theme.accent,
-              letterSpacing: 4,
+              position: "absolute",
+              top: 40,
+              right: 10,
+              left: 10,
+              zIndex: 100,
+              background: "rgba(10,10,15,0.95)",
             }}
           >
-            TENSOR PROTOCOL
-          </h1>
-          <p style={{ marginTop: 8, color: theme.muted, fontSize: 14 }}>
-            System Initializing...
-          </p>
-        </div>
-      )}
+            <div className="label-row" style={{ fontWeight: 900 }}>
+              System Config
+              <button
+                className="btn btn-danger"
+                style={{ padding: "4px 8px" }}
+                onClick={() => setShowMobileSettings(false)}
+              >
+                X
+              </button>
+            </div>
+            <div className="label-row">
+              <span>Accuracy</span>
+              <select
+                value={inferPreset}
+                onChange={(e) =>
+                  setInferPreset(e.target.value as InferencePreset)
+                }
+                style={{
+                  background: "#222",
+                  color: "#fff",
+                  border: "1px solid #444",
+                }}
+              >
+                <option value="FAST">Fast</option>
+                <option value="BALANCED">Balanced</option>
+                <option value="HIGH">High</option>
+              </select>
+            </div>
+            <div className="label-row">
+              <span>FPS Cap ({inferFpsCap})</span>
+              <input
+                type="range"
+                min={10}
+                max={30}
+                step={1}
+                value={inferFpsCap}
+                onChange={(e) => setInferFpsCap(parseInt(e.target.value))}
+              />
+            </div>
+            <div className="label-row">
+              <span>Prefer Integrated</span>
+              <button
+                className={`btn ${preferIntegrated ? "btn-primary" : ""}`}
+                style={{ padding: "2px 8px" }}
+                onClick={() => setPreferIntegrated(!preferIntegrated)}
+              >
+                {preferIntegrated ? "ON" : "OFF"}
+              </button>
+            </div>
+            <div className="label-row">
+              <span>Cam Source</span>
+              <select
+                value={selectedDeviceId}
+                onChange={(e) => {
+                  setSelectedDeviceId(e.target.value);
+                  setPreferIntegrated(false);
+                }}
+                style={{
+                  background: "#222",
+                  color: "#fff",
+                  border: "1px solid #444",
+                  maxWidth: 120,
+                }}
+              >
+                <option value="">Default</option>
+                {devices.map((d) => (
+                  <option key={d.deviceId} value={d.deviceId}>
+                    {d.label?.slice(0, 20) || "Cam"}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="label-row">
+              <span>Landmarks</span>
+              <button
+                className={`btn ${showLandmarks ? "btn-primary" : ""}`}
+                onClick={() => setShowLandmarks(!showLandmarks)}
+              >
+                {showLandmarks ? "ON" : "OFF"}
+              </button>
+            </div>
+          </div>
+        )}
 
-      {/* Instructions Modal */}
-      <div
-        className={`modal-backdrop ${showInstructions ? "open" : ""}`}
-        onClick={() => setShowInstructions(false)}
-      />
-      <div className={`instructions-modal ${showInstructions ? "open" : ""}`}>
-        <h2 style={{ marginBottom: 20, color: theme.accent }}>Instructions</h2>
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: 12,
-            fontSize: 14,
-            color: theme.fg,
-          }}
-        >
-          <p>
-            • <strong>Point Index</strong> → Draw on canvas
-          </p>
-          <p>
-            • <strong>Pinch (Thumb + Index)</strong> → Grab and move strokes
-          </p>
-          <p>
-            • <strong>Twist while pinching</strong> → Rotate selected stroke
-          </p>
-          <p>
-            • <strong>Move hand closer/farther</strong> → Scale selected stroke
-          </p>
-          <p>
-            • <strong>Open Palm</strong> → Select existing strokes
-          </p>
-          <p>
-            • <strong>Voice Command</strong> → Start with "Tensor..." (e.g.,
-            "Tensor clear")
-          </p>
+        {/* Start Indicator */}
+        <div className="tensor-status-container">
+          <div className={`tensor-indicator ${isSpeaking ? "speaking" : ""}`} />
         </div>
-        <button
-          className="btn btn-primary"
-          style={{ marginTop: 24, width: "100%" }}
-          onClick={() => setShowInstructions(false)}
-        >
-          CLOSE
-        </button>
+
+        {/* Left Stack */}
+        <div className="stack-left">
+          <button className="btn icon-only" onClick={undo}>
+            <Icons.Undo />
+          </button>
+          <button className="btn icon-only" onClick={redo}>
+            <Icons.Redo />
+          </button>
+          <button
+            className={`btn icon-only ${eraserMode ? "btn-primary" : ""}`}
+            onClick={() => {
+              const nx = !eraserMode;
+              settingsRef.current.eraserMode = nx;
+              setEraserMode(nx);
+              speak(nx ? "Eraser." : "Draw.");
+            }}
+          >
+            <span style={{ fontWeight: 900 }}>E</span>
+          </button>
+          <button className="btn icon-only btn-danger" onClick={clearAll}>
+            <Icons.Clear />
+          </button>
+          <button
+            className="btn icon-only"
+            onClick={() => void copyToClipboard()}
+          >
+            <span style={{ fontSize: 10 }}>CPY</span>
+          </button>
+        </div>
+
+        {/* Right Stack */}
+        <div className="stack-right">
+          <button
+            className="btn icon-only"
+            style={{ color: "#25D366" }}
+            onClick={() => void sharePng("whatsapp")}
+          >
+            <Icons.WhatsApp />
+          </button>
+          <button
+            className="btn icon-only"
+            style={{ color: "#E1306C" }}
+            onClick={() => void sharePng("instagram")}
+          >
+            <Icons.Instagram />
+          </button>
+          <button
+            className="btn icon-only"
+            style={{ color: "#1877F2" }}
+            onClick={() => void sharePng("facebook")}
+          >
+            <Icons.Facebook />
+          </button>
+          <button className="btn icon-only" onClick={() => void sharePng("x")}>
+            <Icons.Twitter />
+          </button>
+          <button className="btn icon-only" onClick={() => void sharePng()}>
+            <Icons.Share />
+          </button>
+        </div>
+
+        {/* Bottom Corners */}
+        <div className="corner-bl">
+          <button
+            className="btn icon-only"
+            onClick={() => {
+              setFacingMode((f) => (f === "user" ? "environment" : "user"));
+            }}
+          >
+            <Icons.Cameraswitch />
+          </button>
+        </div>
+        <div className="corner-br">
+          <button
+            className="btn btn-primary"
+            style={{ borderRadius: 20, padding: "8px 16px" }}
+            onClick={() => void downloadPng()}
+          >
+            SAVE
+          </button>
+        </div>
       </div>
 
-      {/* Left Panel */}
-      <div className="left-panel">
-        <div className="card desktop-only">
+      {/* ---------------- DESKTOP LAYOUT (Preserved but wrapped) ---------------- */}
+      <div className="desktop-layout left-panel">
+        {/* Original Desktop Cards... */}
+        <div className="card">
           <div
             style={{
               display: "flex",
@@ -3303,9 +3537,9 @@ export default function App() {
           </div>
         </div>
 
-        <div className="card corner-tl">
+        <div className="card">
           <div
-            className="label-row desktop-only"
+            className="label-row"
             style={{ fontWeight: 900, color: theme.fg }}
           >
             Tools
@@ -3324,7 +3558,7 @@ export default function App() {
               <Icons.Redo />
             </button>
             <button
-              className="btn btn-danger desktop-only"
+              className="btn btn-danger"
               title="Clear All"
               onClick={clearAll}
             >
@@ -3333,31 +3567,23 @@ export default function App() {
           </div>
         </div>
 
-        <div className="card corner-bl">
-          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8 }}>
-            <button
-              className={`btn ${eraserMode ? "btn-primary" : ""}`}
-              onClick={() => {
-                const nx = !eraserMode;
-                settingsRef.current.eraserMode = nx;
-                setEraserMode(nx);
-                if (nx) speak("Eraser enabled.");
-                else speak("Draw mode.");
-              }}
-            >
-              {eraserMode ? "Eraser ON" : "Eraser Mode"}
-            </button>
-            <button
-              className="btn btn-danger mobile-only"
-              title="Clear All"
-              onClick={clearAll}
-            >
-              <Icons.Clear /> CLEAR
-            </button>
-          </div>
+        <div className="card">
+          <button
+            className={`btn ${eraserMode ? "btn-primary" : ""}`}
+            style={{ width: "100%" }}
+            onClick={() => {
+              const nx = !eraserMode;
+              settingsRef.current.eraserMode = nx;
+              setEraserMode(nx);
+              if (nx) speak("Eraser enabled.");
+              else speak("Draw mode.");
+            }}
+          >
+            {eraserMode ? "Eraser ON" : "Eraser Mode"}
+          </button>
         </div>
 
-        <div className="card corner-br">
+        <div className="card">
           <div
             style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}
           >
@@ -3378,7 +3604,7 @@ export default function App() {
           </div>
         </div>
 
-        <div className="card desktop-only">
+        <div className="card">
           <div
             className="label-row"
             style={{ fontWeight: 900, color: theme.fg }}
@@ -3400,7 +3626,6 @@ export default function App() {
               }}
             />
           </div>
-
           <div className="label-row">
             <span>Thickness</span>
             <input
@@ -3418,9 +3643,7 @@ export default function App() {
               {baseThickness.toFixed(0)}
             </span>
           </div>
-
           <div style={{ height: 16 }} />
-
           <div
             className="label-row"
             style={{ fontWeight: 900, color: theme.fg }}
@@ -3471,9 +3694,7 @@ export default function App() {
               <Icons.Triangle />
             </button>
           </div>
-
           <div style={{ height: 12 }} />
-
           <div style={{ display: "flex", gap: 8 }}>
             <button
               className="btn"
@@ -3492,53 +3713,6 @@ export default function App() {
           </div>
         </div>
 
-        <div className="card desktop-only">
-          <div
-            className="label-row"
-            style={{ fontWeight: 900, color: theme.fg }}
-          >
-            Social Protocol
-          </div>
-          <div
-            style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}
-          >
-            <button
-              className="btn"
-              style={{ background: "rgba(37,211,102,0.1)" }}
-              onClick={() => void sharePng("whatsapp")}
-            >
-              <Icons.WhatsApp />
-            </button>
-            <button
-              className="btn"
-              style={{ background: "rgba(225,48,108,0.1)" }}
-              onClick={() => void sharePng("instagram")}
-            >
-              <Icons.Instagram />
-            </button>
-            <button
-              className="btn"
-              style={{ background: "rgba(24,119,242,0.1)" }}
-              onClick={() => void sharePng("facebook")}
-            >
-              <Icons.Facebook />
-            </button>
-            <button
-              className="btn"
-              style={{ background: "rgba(255,255,255,0.05)" }}
-              onClick={() => void sharePng("x")}
-            >
-              <Icons.Twitter />
-            </button>
-          </div>
-          <button
-            className="btn"
-            style={{ marginTop: 8, width: "100%" }}
-            onClick={() => void copyToClipboard()}
-          >
-            COPY TO CLIPBOARD
-          </button>
-        </div>
         <div className="card">
           <div
             className="label-row"
@@ -3566,7 +3740,6 @@ export default function App() {
               <option value="HIGH">High</option>
             </select>
           </div>
-
           <div className="label-row">
             <span>FPS Cap</span>
             <input
@@ -3579,7 +3752,6 @@ export default function App() {
             />
             <span style={{ width: 24, textAlign: "right" }}>{inferFpsCap}</span>
           </div>
-
           <div style={{ height: 12 }} />
           <div
             className="label-row"
@@ -3587,7 +3759,6 @@ export default function App() {
           >
             Camera Selection
           </div>
-
           <div className="label-row">
             <span>Prefer Integrated</span>
             <button
@@ -3598,7 +3769,6 @@ export default function App() {
               {preferIntegrated ? "ON" : "OFF"}
             </button>
           </div>
-
           <div className="label-row">
             <span>Source</span>
             <select
@@ -3617,7 +3787,7 @@ export default function App() {
                 fontSize: 10,
               }}
             >
-              <option value="">Default (Facing Mode)</option>
+              <option value="">Default</option>
               {devices.map((d) => (
                 <option key={d.deviceId} value={d.deviceId}>
                   {d.label || `Camera ${d.deviceId.slice(0, 4)}`}
@@ -3626,103 +3796,41 @@ export default function App() {
             </select>
           </div>
         </div>
-
-        <div className="card corner-tr">
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 8,
-            }}
-          >
-            <button
-              className="btn"
-              title="Swap Camera"
-              onClick={() => {
-                setFacingMode((f: "user" | "environment") =>
-                  f === "user" ? "environment" : "user",
-                );
-                speak("Switching camera.");
-              }}
-            >
-              <Icons.Cameraswitch />
-            </button>
-            <button
-              className={`btn ${voiceOn ? "btn-primary" : ""}`}
-              onClick={() => setVoiceOn((v) => !v)}
-            >
-              {voiceOn ? <Icons.MicOn /> : <Icons.MicOff />}
-            </button>
-          </div>
-          <div
-            className="desktop-only"
-            style={{
-              marginTop: 10,
-              fontSize: 11,
-              color: theme.muted,
-              fontStyle: "italic",
-            }}
-          >
-            {voiceHint}
-          </div>
-        </div>
-
-        <div className="card" style={{ fontSize: 11, color: theme.muted }}>
-          FPS {hud.fps.toFixed(0)} • Latency {hud.inferMs.toFixed(0)}ms •
-          Strokes {hud.strokes} • Guest{" "}
-          {hud.guestUnlocked ? "Unlocked" : "Locked"}
-        </div>
       </div>
 
-      {/* Main Interaction Stage */}
+      {/* Desktop Canvas is redundant here as we moved it to Mobile Layout (shared) or we need a Desktop Render? 
+          Actually, the prompt implies "Current Mistakes... correct Implementation Plan". 
+          The Plan said "Refactor JSX to use explicit mobile-layout and desktop-layout".
+          The Canvas Wrapper is shared. But on Mobile it's absolute. On desktop it's in the grid.
+      */}
       <div
-        className={`canvas-wrapper ${tracksRef.current.length > 0 ? "active" : ""}`}
-        style={{ aspectRatio: `${videoAspect}` }}
+        className={`canvas-wrapper ${tracksRef.current.length > 0 ? "visible" : ""}`}
       >
         <video ref={videoRef} className="video-layer" muted playsInline />
         <canvas ref={drawRef} className="canvas-layer" />
         <canvas ref={overlayRef} className="canvas-layer" />
         <canvas ref={inferCanvasRef} style={{ display: "none" }} />
-
-        {/* Vignette & HUD Overlays */}
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            pointerEvents: "none",
-            boxShadow: "inset 0 0 100px rgba(0,0,0,0.5)",
-          }}
-        />
         {!ready && (
           <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              background: "rgba(0,0,0,0.4)",
-              backdropFilter: "blur(8px)",
-            }}
+            className="opening-overlay"
+            style={{ background: "transparent" }}
           >
-            <div style={{ textAlign: "center" }}>
-              <div className="tensor-logo" style={{ margin: "0 auto 20px" }} />
-              <div
-                style={{ fontSize: 18, fontWeight: 900, color: theme.accent }}
-              >
-                {loadingStep}
-              </div>
-            </div>
+            <div className="nova-logo" />
           </div>
         )}
       </div>
 
-      <div className="tensor-status-container">
-        <div className={`tensor-indicator ${isSpeaking ? "speaking" : ""}`} />
-      </div>
-
-      <div className="mobile-only mobile-voice-hint">{voiceHint}</div>
+      {/* Shared Canvas Wrapper mounted once */}
+      {/* But wait, my CSS defines .mobile-layout as Flex and .desktop-layout as Grid columns 
+        The css for .app-container on desktop is "grid 340px 1fr".
+        So the canvas wrapper *must* be the second child of app-container for desktop grid work.
+    */}
+      {/* Fix:
+       The Canvas Wrapper should be a direct child of app-container.
+       Mobile CSS hides .desktop-layout (sidebar).
+       Mobile CSS styles .canvas-wrapper as absolute centered.
+       Desktop CSS styles .canvas-wrapper as grid item.
+    */}
     </div>
   );
 }

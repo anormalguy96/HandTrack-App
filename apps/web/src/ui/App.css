@@ -19,13 +19,16 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
   background-color: var(--bg);
   color: var(--fg);
   font-family: var(--font-stack);
-  overflow-x: hidden;
+  overflow: hidden; /* Prevent scrolling on mobile */
+  width: 100vw;
+  height: 100vh;
 }
 
 .app-container {
@@ -39,264 +42,162 @@ body {
   animation: fadeIn 0.8s ease-out forwards;
 }
 
-@media (max-width: 1024px) {
-  .app-container {
-    grid-template-columns: 1fr;
-    padding: 16px;
-  }
-
-  .left-panel {
-    order: 2;
-  }
-
-  .canvas-wrapper {
-    order: 1;
-    width: 100%;
-    margin-bottom: 20px;
-  }
-}
-
-.mobile-only {
+.mobile-layout {
   display: none;
 }
 
-@media (max-width: 600px) {
-  .desktop-only {
-    display: none !important;
-  }
-
-  .mobile-only {
-    display: flex !important;
-  }
-
+/* ---------------- MOBILE OVERRIDES ---------------- */
+@media (max-width: 1024px) {
   .app-container {
     padding: 0;
     margin: 0;
     width: 100vw;
     height: 100vh;
-    background: #000; /* Phone Frame Body */
     display: flex;
     flex-direction: column;
+    background: #000;
+  }
+
+  .desktop-layout {
+    display: none !important;
+  }
+
+  .mobile-layout {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* --- Top Bar --- */
+  .top-bar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 32px;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
     align-items: center;
     justify-content: center;
-    position: relative;
-    overflow: hidden;
+    z-index: 50;
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 0.5px;
+    backdrop-filter: blur(4px);
+    border-bottom: 1px solid var(--border);
   }
 
-  /* 1) PHONE FRAME (Implicitly the screen, but we enforce boundaries) */
-
-  /* 2) GREEN STAGE (Center) */
+  /* --- Stage --- */
   .canvas-wrapper {
-    position: relative;
-    width: 90vw;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 100%;
+    max-width: 100vw;
     aspect-ratio: 9/16;
-    max-height: 80vh;
-    margin: 0 auto;
-    border: 2px solid #69f0ae; /* Green Stage Border */
-    box-shadow: 0 0 20px rgba(105, 240, 174, 0.2);
-    border-radius: 4px;
-    z-index: 10;
-    background: #000;
-    overflow: hidden;
-    order: 2; /* Visual Order */
-    flex-shrink: 0;
+    /* If screen is shorter than 16:9, we might need adjustments, 
+       but 9/16 ensures we treat it as portrait stage */
+    max-height: 100vh;
+    border: 1px solid #222;
+    box-shadow: none; /* Perf */
+    z-index: 1;
   }
 
+  /* Neon border on active stage */
   .canvas-wrapper.active {
-    border-color: #69f0ae;
-    box-shadow: 0 0 30px rgba(105, 240, 174, 0.4);
+    border-color: var(--accent);
+    box-shadow: 0 0 10px rgba(105, 240, 174, 0.15);
   }
 
-  /* 3) LEFT TOOLBAR */
-  .left-panel {
-    display: contents; /* flattened */
-  }
-
-  .card.corner-tl,
-  .card.corner-bl {
-    /* We repurpose these or create a new container in App.tsx? */
-    /* Actually better to use absolute positioning relative to phone frame */
-    /* But current HTML structure is: LeftPanel > Cards */
-    /* We need to break them out visually */
-  }
-
-  /* We need a specific "Left Toolbar" container. 
-     Since HTML structure is rigid, we'll use absolute positioning on the specific ID/Classes 
-     assuming they are identifiable. */
-
-  /* Repositioning the "Tools" card content */
-  .corner-tl {
+  /* --- Stacks --- */
+  .stack-left {
     position: absolute;
     left: 10px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 50px;
-    padding: 0;
-    background: transparent;
-    border: none;
-    box-shadow: none;
-    backdrop-filter: none;
-    z-index: 20;
+    top: 60px;
+    bottom: 80px; /* Leave room for bottom corners */
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 16px;
+    z-index: 20;
+    pointer-events: none; /* Allow clicks through gaps */
   }
 
-  .corner-tl .label-row,
-  .corner-tl .btn-danger {
-    display: none;
-  }
-
-  .corner-tl div[style*="grid"] {
-    display: flex !important;
+  .stack-right {
+    position: absolute;
+    right: 10px;
+    top: 60px;
+    bottom: 80px;
+    display: flex;
     flex-direction: column;
-    gap: 16px !important;
+    gap: 16px;
+    z-index: 20;
+    pointer-events: none;
   }
 
-  /* Specific buttons in left toolbar */
-  .corner-tl .btn {
-    width: 44px;
-    height: 44px;
-    border-radius: 50%;
-    background: #111;
-    border: 1px solid #333;
-    padding: 0;
+  .stack-left > *,
+  .stack-right > * {
+    pointer-events: auto;
   }
 
-  /* Eraser toggle (in corner-bl normally) -> moved to Left Toolbar visually? 
-     Or keep it bottom left? Layout says "Left Vertical Toolbar".
-     We might need to move Eraser into the same visual stack. 
-     For now, let's put corner-bl at the bottom of the left stack. 
-  */
+  /* --- Bottom Corners --- */
   .corner-bl {
     position: absolute;
-    left: 10px;
-    top: calc(50% + 140px); /* Offset from top stack */
-    width: 50px;
-    padding: 0;
-    background: transparent;
-    border: none;
-    box-shadow: none;
-    z-index: 20;
-  }
-  .corner-bl div {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-  .corner-bl .btn {
-    width: 44px;
-    height: 44px;
-    border-radius: 50%;
-    padding: 0;
-    font-size: 0; /* Hide text "Eraser Mode" */
-  }
-  .corner-bl .btn::after {
-    content: "E"; /* Fallback icon or SVG? SVG is inside. */
-    font-size: 14px;
-    color: #fff;
-  }
-
-  /* 4) RIGHT SOCIAL STACK */
-  /* corner-tr is usually "Camera Swap" and "Mic" */
-  /* We want Social Stack on Right. current HTML has social in "desktop-only" card.
-     Wait, the user said "Right Vertical Social Stack". 
-     The current `desktop-only` card with social icons is HIDDEN on mobile.
-     We must UN-HIDE it for mobile but styling it differently.
-  */
-
-  /* We need to target the social card. It doesn't have a unique class in `App.tsx` other than order. 
-     We might need to add a class in App.tsx first. 
-     BUT, if we can't edit App.tsx HTML structure easily for this, we might be stuck.
-     Actually I can modify App.tsx to add `className="social-stack mobile-visible"` etc.
-  */
-
-  /* 5) BOTTOM CONTROLS */
-  /* Swap Camera (bottom-left) & Save As (bottom-right) */
-
-  .corner-tr {
-    /* Camera Swap & Mic are here. 
-       User wants: Bottom-Left = Swap Camera. 
-       Mic isn't specified but needed.
-       Save As (floppy) = Bottom-Right.
-    */
-    position: absolute;
-    bottom: 30px;
+    bottom: 20px;
     left: 20px;
-    top: auto;
-    right: auto;
-    width: auto;
-    background: transparent;
-    border: none;
-    padding: 0;
-    box-shadow: none;
-    z-index: 20;
-    display: flex;
-    gap: 20px;
+    z-index: 30;
   }
-  .corner-tr .btn {
-    width: 48px;
-    height: 48px;
-    border-radius: 50%;
-    background: #222;
-    border: 1px solid #444;
-  }
-
   .corner-br {
-    /* Save As */
     position: absolute;
-    bottom: 30px;
+    bottom: 20px;
     right: 20px;
-    top: auto;
-    left: auto;
-    width: auto;
-    background: transparent;
-    border: none;
-    padding: 0;
-    box-shadow: none;
-    z-index: 20;
+    z-index: 30;
   }
-  .corner-br .btn {
-    width: 48px;
-    height: 48px;
-    border-radius: 50%;
-    background: #69f0ae;
-    color: #000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0;
-  }
-  .corner-br .btn svg {
-    stroke: #000;
-  }
-  /* Hide "Share" usage in corner-br if it exists, only "Save/Export" is needed there? 
-     User said "Bottom-right: Save As".
-  */
 
-  /* 6) TENSOR INDICATOR */
+  /* --- Speaking Indicator --- */
   .tensor-status-container {
     position: absolute;
-    bottom: 10px;
+    bottom: 24px;
     left: 50%;
     transform: translateX(-50%);
     z-index: 30;
   }
-  .tensor-indicator {
-    width: 12px;
-    height: 12px;
-    background: #223;
-    border: 2px solid #334;
+
+  /* --- Buttons --- */
+  .btn.icon-only {
+    width: 44px;
+    height: 44px;
+    padding: 0;
     border-radius: 50%;
-    transition: all 0.2s;
+    background: rgba(10, 10, 10, 0.85);
+    border: 1px solid var(--border);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
-  .tensor-indicator.speaking {
-    background: #69f0ae;
-    box-shadow: 0 0 15px #69f0ae;
-    transform: scale(1.5);
+  .btn.icon-only svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  /* --- Mobile Settings Block --- */
+  .mobile-settings {
+    margin-top: auto; /* Push to bottom of stack if needed */
+    pointer-events: auto;
+  }
+
+  /* Hide desktop cards */
+  .card.desktop-only,
+  .left-panel {
+    display: none !important;
   }
 }
 
+/* ---------------- ANIMATIONS ---------------- */
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -308,29 +209,33 @@ body {
   }
 }
 
-.left-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  z-index: 10;
+.nova-logo {
+  width: 120px;
+  height: 120px;
+  border: 4px solid var(--accent); /* Thinner for perf */
+  border-radius: 50%;
+  position: relative;
+  animation: logoPulse 2s infinite ease-in-out;
+  box-shadow: 0 0 15px rgba(105, 240, 174, 0.3); /* Reduced shadow */
 }
 
-.card {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  padding: 16px;
-  backdrop-filter: var(--glass);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+/* Reduced animation complexity */
+@keyframes logoPulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 10px var(--accent);
+  }
+  50% {
+    transform: scale(1.05);
+    box-shadow: 0 0 25px var(--accent);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 10px var(--accent);
+  }
 }
 
-.card:hover {
-  border-color: var(--border2);
-  transform: translateY(-2px);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
-}
-
+/* ---------------- UTILS ---------------- */
 .btn {
   padding: 12px 16px;
   border-radius: 14px;
@@ -340,69 +245,29 @@ body {
   cursor: pointer;
   font-weight: 700;
   font-family: var(--font-stack);
-  transition: all 0.2s ease;
+  transition: transform 0.1s ease;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
   outline: none;
 }
-
 .btn:hover {
   background: rgba(255, 255, 255, 0.1);
   border-color: var(--border2);
-  transform: scale(1.02);
 }
-
 .btn:active {
-  transform: scale(0.98);
+  transform: scale(0.96);
 }
-
 .btn-primary {
   background: rgba(105, 240, 174, 0.15);
   border-color: rgba(105, 240, 174, 0.3);
   color: var(--accent);
 }
-
-.btn-primary:hover {
-  background: rgba(105, 240, 174, 0.25);
-  border-color: var(--accent);
-  box-shadow: var(--glow-shadow);
-}
-
 .btn-danger {
   background: rgba(255, 85, 102, 0.1);
   border-color: rgba(255, 85, 102, 0.2);
   color: var(--danger);
-}
-
-.btn-danger:hover {
-  background: rgba(255, 85, 102, 0.2);
-  border-color: var(--danger);
-}
-
-.label-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  color: var(--muted);
-  font-size: 13px;
-  margin-bottom: 8px;
-}
-
-.canvas-wrapper {
-  position: relative;
-  border: 1px solid var(--border);
-  border-radius: 24px;
-  overflow: hidden;
-  background: rgba(255, 255, 255, 0.02);
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
-  transition: border-color 0.5s ease;
-}
-
-.canvas-wrapper.active {
-  border-color: var(--accent);
 }
 
 .video-layer {
@@ -410,11 +275,10 @@ body {
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: fill;
+  object-fit: cover; /* CHANGED to cover + crop logic */
   transform: scaleX(-1);
-  filter: brightness(0.8) contrast(1.1);
+  filter: brightness(0.9) contrast(1.1); /* Reduced complexity */
 }
-
 .canvas-layer {
   position: absolute;
   inset: 0;
@@ -422,175 +286,18 @@ body {
   height: 100%;
   pointer-events: none;
   transform: scaleX(-1);
-  object-fit: fill;
+  /* object-fit: cover; Match video-layer */
 }
 
-/* Animations & Transitions */
-
-.opening-overlay {
-  position: fixed;
-  inset: 0;
-  background: var(--bg);
-  z-index: 1000;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  animation: fadeOutOverlay 1s ease-in 2.5s forwards;
-  pointer-events: none;
-}
-
-@keyframes fadeOutOverlay {
-  to {
-    opacity: 0;
-    visibility: hidden;
-  }
-}
-
-.nova-logo {
-  width: 120px;
-  height: 120px;
-  border: 8px solid var(--accent);
+.tensor-indicator {
+  width: 10px;
+  height: 10px;
+  background: #334;
   border-radius: 50%;
-  position: relative;
-  animation: logoPulse 2s infinite ease-in-out;
-  box-shadow: var(--glow-shadow);
+  transition: all 0.2s;
 }
-
-.nova-overlay {
-  position: absolute;
-  bottom: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 20;
-  pointer-events: none;
-}
-
-.nova-indicator {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  background: rgba(105, 240, 174, 0.2);
-  border: 2px solid var(--accent);
-  position: relative;
-  transition: all 0.3s ease;
-  box-shadow: 0 0 15px rgba(105, 240, 174, 0.3);
-}
-
-.nova-indicator::after {
-  content: "";
-  position: absolute;
-  inset: -4px;
-  border-radius: 50%;
-  border: 1px solid var(--accent);
-  opacity: 0;
-}
-
-.nova-indicator.speaking {
-  background: var(--accent);
-  box-shadow:
-    0 0 30px var(--accent),
-    0 0 60px var(--accent);
-  animation: novaPulse 0.5s infinite alternate;
-}
-
-.nova-indicator.speaking::after {
-  animation: novaRipple 1.2s infinite ease-out;
-}
-
-@keyframes novaPulse {
-  from {
-    transform: scale(1);
-    opacity: 0.8;
-  }
-  to {
-    transform: scale(1.15);
-    opacity: 1;
-  }
-}
-
-@keyframes novaRipple {
-  0% {
-    transform: scale(1);
-    opacity: 0.8;
-    border-width: 2px;
-  }
-  100% {
-    transform: scale(2);
-    opacity: 0;
-    border-width: 0px;
-  }
-}
-
-@keyframes logoPulse {
-  0% {
-    transform: scale(1);
-    box-shadow: 0 0 20px var(--accent);
-  }
-  50% {
-    transform: scale(1.1);
-    box-shadow: 0 0 50px var(--accent);
-  }
-  100% {
-    transform: scale(1);
-    box-shadow: 0 0 20px var(--accent);
-  }
-}
-
-.instructions-modal {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%) scale(0.9);
-  width: 90%;
-  max-width: 500px;
-  background: rgba(11, 13, 16, 0.95);
-  border: 1px solid var(--accent);
-  border-radius: 24px;
-  padding: 32px;
-  z-index: 100;
-  opacity: 0;
-  visibility: hidden;
-  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  backdrop-filter: blur(20px);
-}
-
-.instructions-modal.open {
-  opacity: 1;
-  visibility: visible;
-  transform: translate(-50%, -50%) scale(1);
-}
-
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(4px);
-  z-index: 99;
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.3s ease;
-}
-
-.modal-backdrop.open {
-  opacity: 1;
-  visibility: visible;
-}
-
-/* Scrollbar */
-::-webkit-scrollbar {
-  width: 6px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 10px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: var(--border2);
+.tensor-indicator.speaking {
+  background: #69f0ae;
+  transform: scale(1.4);
+  box-shadow: 0 0 10px #69f0ae;
 }
