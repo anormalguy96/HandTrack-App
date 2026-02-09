@@ -4280,7 +4280,6 @@ export default function App() {
             onClick={() => setVoiceOn(!voiceOn)}
             style={{ width: "100%", gap: 8 }}
           >
-            <div className="flux-logo small" />
             {voiceOn ? "Voice ON" : "Voice OFF"}
           </button>
           {voiceOn && (
