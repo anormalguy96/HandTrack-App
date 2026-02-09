@@ -2128,7 +2128,8 @@ export default function App() {
           t.includes("swap") ||
           t.includes("switch") ||
           t.includes("flip") ||
-          t.includes("change")
+          t.includes("change") ||
+          t.includes("switch")
         ) {
           setFacingMode((f: "user" | "environment") =>
             f === "user" ? "environment" : "user",
@@ -2137,14 +2138,44 @@ export default function App() {
           return;
         }
       }
+      if (t.includes("thanks")) {
+        speak("You're welcome!");
+        return;
+      }
+      if (t.includes("thank you")) {
+        speak("Welli thank you");
+        return;
+      }
+      if (t.includes("hello") || t.includes("hi") || t.includes("hi there") || t.includes("hi there.")) {
+        speak("Hello! How can I help you?");
+        return;
+      }
+      if (t.includes("goodbye") || t.includes("bye")) {
+        speak("Goodbye! Have a great day!");
+        return;
+      }
+      if (t.includes("how are you") || t.includes("wassup") || t.includes("how you doing?") || t.includes("how you doing?")) {
+        speak("I'm doing great, thank you! How about you?");
+        return;
+      }
+      if (t.includes("i'm good") || t.includes("i'm doing good")) {
+        speak("That's great!");
+        return;
+      }
+      if (t.includes("clear")) {
+        clearAll();
+        speak("Canvas cleared.");
+        return;
+      }
+      if (t.includes("erase")) {
+        setEraserMode(true);
+        speak("Eraser mode enabled. Use your index finger to erase.");
+        return;
+      }
 
-      // ERASER MODES
-      // Type 1: Remove specific item or selection
       if (
         t.includes("remove") ||
-        t.includes("delete") ||
-        t.includes("erase") ||
-        t.includes("clear")
+        t.includes("delete")
       ) {
         if (
           t.includes("all") ||
