@@ -916,6 +916,51 @@ function getMapScale(
   return { scaleX: scale, scaleY: scale, offsetX, offsetY };
 }
 
+/* ------------------------------- Components ----------------------------- */
+const HudDisplay = React.memo(
+  ({
+    hud,
+    ready,
+    loadingStep,
+  }: {
+    hud: {
+      fps: number;
+      inferMs: number;
+      strokes: number;
+      hands: number;
+      guestUnlocked: boolean;
+    };
+    ready: boolean;
+    loadingStep: string;
+  }) => {
+    return (
+      <div
+        className="top-bar-hud"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "12px",
+          fontSize: "10px",
+          color: "rgba(255,255,255,0.6)",
+          fontFamily: "monospace",
+          pointerEvents: "none",
+        }}
+      >
+        {ready ? (
+          <>
+            <span style={{ color: "#69F0AE" }}>FPS: {hud.fps.toFixed(0)}</span>
+            <span>INF: {hud.inferMs.toFixed(1)}ms</span>
+            <span>OBJ: {hud.strokes}</span>
+            <span>PTR: {hud.hands}</span>
+          </>
+        ) : (
+          <span>{loadingStep}</span>
+        )}
+      </div>
+    );
+  },
+);
+
 function getVisualRect(el: HTMLElement) {
   const r = el.getBoundingClientRect();
   return { w: r.width, h: r.height };
@@ -1136,7 +1181,7 @@ export default function App() {
   // Inject a nicer font (Inter) if the project doesn't already provide it.
 
   useEffect(() => {
-    const id = "neon-font-lexend";
+    const id = "flux-font-lexend";
     if (document.getElementById(id)) return;
     const link = document.createElement("link");
     link.id = id;
@@ -1303,25 +1348,42 @@ export default function App() {
       b: StrokePoint,
       glow: boolean,
     ) => {
-      ctx.lineCap = "round";
-      ctx.lineJoin = "round";
+      // PERF: Minimal state changes here. lineCap/Join should be set once per frame outside.
       ctx.strokeStyle = color;
-      ctx.lineWidth = b.w;
 
       if (glow) {
-        ctx.shadowBlur = 18;
-        ctx.shadowColor = color;
+        // [FIX] Fake Glow Technique (10-20x faster than shadowBlur)
+        // Pass 1: Wide, very faint
+        ctx.globalAlpha = 0.12;
+        ctx.lineWidth = b.w + 14;
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
+
+        // Pass 2: Medium, faint
+        ctx.globalAlpha = 0.25;
+        ctx.lineWidth = b.w + 6;
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
+
+        // Pass 3: Core, solid
+        ctx.globalAlpha = 1.0;
+        ctx.lineWidth = b.w;
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
       } else {
-        ctx.shadowBlur = 0;
+        ctx.globalAlpha = 1.0;
+        ctx.lineWidth = b.w;
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
       }
-
-      ctx.beginPath();
-      ctx.moveTo(a.x, a.y);
-      ctx.lineTo(b.x, b.y);
-      ctx.stroke();
-
-      // reset only what matters
-      ctx.shadowBlur = 0;
     },
     [],
   );
@@ -1339,6 +1401,9 @@ export default function App() {
 
     const glowOn = settingsRef.current.glow;
     const strokes = strokesRef.current;
+
+    // [OPT] Set invariant state once
+    bctx.lineCap = bctx.lineJoin = "round";
 
     // Full Bake - Draw all finished strokes into buffer
     for (const stroke of strokes) {
@@ -1917,7 +1982,7 @@ export default function App() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `neon_session_${Date.now()}.svg`;
+        a.download = `flux_session_${Date.now()}.svg`;
         a.click();
         URL.revokeObjectURL(url);
 
@@ -1957,7 +2022,7 @@ export default function App() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `neon_session_${Date.now()}.${mime === "video/mp4" ? "mp4" : "webm"}`;
+        a.download = `flux_session_${Date.now()}.${mime === "video/mp4" ? "mp4" : "webm"}`;
         a.click();
         URL.revokeObjectURL(url);
         speak("Video saved.");
@@ -2164,7 +2229,11 @@ export default function App() {
 
   // Restart camera when device/facing selection changes
   useEffect(() => {
-    if (ready) startCamera();
+    // Only start if ready AND not already trying to play or having a stream
+    const v = videoRef.current;
+    if (ready && v && !v.srcObject) {
+      startCamera();
+    }
   }, [selectedDeviceId, facingMode, ready, startCamera]);
 
   /* ------------------------------ track assignment ------------------------------ */
@@ -2563,6 +2632,10 @@ export default function App() {
       const ctx = ov.getContext("2d")!;
       ctx.clearRect(0, 0, ov.width, ov.height);
 
+      // [OPT] Set invariant state once
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+
       const W = ov.width;
       const H = ov.height;
 
@@ -2910,7 +2983,8 @@ export default function App() {
       setLoadingStep("1/4 Camera…");
       try {
         await updateDevices();
-        await startCamera();
+        // [FIX] Removed startCamera here.
+        // The 'ready' effect (line 2166) handles starting camera once models are loaded.
       } catch (e: any) {
         setLoadingStep(`Cam ERROR: ${e.name || "Access"}`);
         return;
@@ -3102,7 +3176,7 @@ export default function App() {
             v.videoHeight,
             W,
             H,
-            isMobileLayout ? "cover" : "fill",
+            isMobileLayout ? "contain" : "fill",
           );
           nextPtIdxRef.current = 0;
           const factorX = v.videoWidth * map.scaleX;
@@ -3392,8 +3466,17 @@ export default function App() {
   /* -------------------------- Voice Command Handling ------------------------- */
   const handleVoiceCommand = useCallback(
     (transcript: string) => {
-      const lower = transcript.toLowerCase().trim();
-      console.log("[Voice] Command:", lower);
+      let lower = transcript.toLowerCase().trim();
+      // Remove trailing punctuation from transcription services
+      lower = lower.replace(/[.,?!]/g, "");
+
+      console.log("[Voice] Raw:", lower);
+
+      // Support "Flux" as a wake-word or just "Flux"
+      if (lower.startsWith("flux")) {
+        lower = lower.replace(/^flux\s*/, "").trim();
+        if (!lower) return; // Just said "Flux"
+      }
 
       // Feedback
       // setVoiceHint(`Heard: "${lower}"`);
@@ -3608,7 +3691,7 @@ export default function App() {
         rec.stop();
       }
     };
-  }, [voiceOn, handleVoiceCommand]);
+  }, [voiceOn]); // [FIX] Removed handleVoiceCommand from dependencies to prevent restarts
 
   return (
     <div className="app-container">
@@ -3616,11 +3699,7 @@ export default function App() {
       <div className="mobile-layout">
         {/* Top Bar */}
         <div className="top-bar">
-          {ready ? (
-            <span>Running. Point → draw. Fist → grab. Palm → select.</span>
-          ) : (
-            <span>{loadingStep}</span>
-          )}
+          <HudDisplay hud={hud} ready={ready} loadingStep={loadingStep} />
           <button
             className={`btn icon-only ${showMobileSettings ? "rotate-90" : ""}`}
             style={{
@@ -3748,8 +3827,7 @@ export default function App() {
               const nx = !eraserMode;
               settingsRef.current.eraserMode = nx;
               setEraserMode(nx);
-              speak(nx ? "Eraser." : "Draw.");
-              if (nx) speak("Eraser mode.");
+              speak(nx ? "Eraser mode." : "Drawing mode.");
             }}
           >
             <Icons.Eraser />
@@ -3869,8 +3947,7 @@ export default function App() {
             </button>
           </div>
           <div style={{ fontSize: 11, color: theme.muted, marginTop: 10 }}>
-            Protocol {ready ? "Active" : "Booting..."} • Voice Authorisation
-            Required
+            <HudDisplay hud={hud} ready={ready} loadingStep={loadingStep} />
           </div>
         </div>
 

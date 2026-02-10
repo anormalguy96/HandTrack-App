@@ -392,8 +392,7 @@ select option {
   }
 
   .video-layer {
-    object-fit: cover;
-    /* Last changes 2026: Removed scale(0.96) to prevent shrinking */
+    object-fit: contain; /* Changed from cover to show full camera feed */
     transform: none;
     transform-origin: center;
     border-radius: 0;
