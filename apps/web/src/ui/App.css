@@ -390,6 +390,30 @@ select option {
   .left-panel {
     display: none !important;
   }
+
+  .video-layer {
+    object-fit: cover;
+    /* Last changes 2026: Removed scale(0.96) to prevent shrinking */
+    transform: none;
+    transform-origin: center;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .canvas-layer {
+    /* Last changes 2026: Removed scale to match video */
+    transform: none;
+    transform-origin: center;
+  }
+
+  /* ---------------- PERF GUARD ---------------- */
+  /* backdrop-filter over a live camera/video is expensive on many mobile GPUs.
+     Disable it on mobile to reduce jank (keep the translucent background). */
+  .top-bar,
+  .btn.icon-only {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
 }
 
 /* ---------------- ANIMATIONS ---------------- */
@@ -507,29 +531,12 @@ select option {
   transform: scaleX(-1);
 }
 
-@media (max-width: 1024px) {
-  .video-layer {
-    object-fit: cover;
-    /* Last changes 2026: Removed scale(0.96) to prevent shrinking */
-    transform: none;
-    transform-origin: center;
-    border-radius: 0;
-    box-shadow: none;
-  }
-}
 .canvas-layer {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   pointer-events: none;
-}
-@media (max-width: 1024px) {
-  .canvas-layer {
-    /* Last changes 2026: Removed scale to match video */
-    transform: none;
-    transform-origin: center;
-  }
 }
 
 .flux-status-container {

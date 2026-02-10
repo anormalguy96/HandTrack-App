@@ -3472,7 +3472,7 @@ export default function App() {
         ictx.drawImage(v, 0, 0, sz.w, sz.h);
 
         const t0 = performance.now();
-        const ts = performance.now();
+        const ts = now;
 
         // ✅ infer on the downscaled canvas
         const res: GestureRecognizerResult = lm.recognizeForVideo(infer, ts);
@@ -3510,19 +3510,15 @@ export default function App() {
           const H = draw.height;
 
           const dets: HandDet[] = [];
-
-          const { w: vW, h: vH } = getVisualRect(v);
-
           const isMobileLayout = window.innerWidth <= 1024;
+          // PERF: avoid layout thrash (getBoundingClientRect) on every inference tick
           const map = getMapScale(
             v.videoWidth,
             v.videoHeight,
-            vW,
-            vH,
+            W,
+            H,
             isMobileLayout ? "cover" : "fill",
           );
-
-          // Reset point pool for this frame
           nextPtIdxRef.current = 0;
           const factorX = v.videoWidth * map.scaleX;
           const factorY = v.videoHeight * map.scaleY;
@@ -3717,40 +3713,6 @@ export default function App() {
       if (needsFullRedrawRef.current) {
         needsFullRedrawRef.current = false;
         fullRedraw();
-      } else {
-        // High-performance Composite
-        const canvas = drawRef.current;
-        const buffer = bufferCanvasRef.current;
-        if (canvas && buffer) {
-          const ctx = canvas.getContext("2d")!;
-          // Reset main canvas only (we keep the buffer intact)
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-          // 1. Draw the baked world (0-cost composite)
-          ctx.drawImage(buffer, 0, 0);
-
-          // 2. Draw active strokes (currently being drawn by hands)
-          const glow = settingsRef.current.glow;
-          const tracks = tracksRef.current;
-          for (const tr of tracks) {
-            if (tr.drawStrokeId) {
-              const s = strokesRef.current.find(
-                (st) => st.id === tr.drawStrokeId,
-              );
-              if (s) {
-                for (let i = 1; i < s.points.length; i++) {
-                  paintStrokeSegment(
-                    ctx,
-                    s.color,
-                    s.points[i - 1],
-                    s.points[i],
-                    glow,
-                  );
-                }
-              }
-            }
-          }
-        }
       }
 
       // Throttle overlay rendering to 60fps
