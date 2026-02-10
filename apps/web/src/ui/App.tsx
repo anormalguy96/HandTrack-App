@@ -16,6 +16,54 @@ import {
 } from "@mediapipe/tasks-vision";
 import "./App.css";
 
+// ---------------------- SPEECH RECOGNITION TYPES ----------------------
+interface SpeechRecognitionEvent extends Event {
+  results: SpeechRecognitionResultList;
+  resultIndex: number;
+}
+
+interface SpeechRecognitionResultList {
+  length: number;
+  item(index: number): SpeechRecognitionResult;
+  [index: number]: SpeechRecognitionResult;
+}
+
+interface SpeechRecognitionResult {
+  length: number;
+  item(index: number): SpeechRecognitionAlternative;
+  [index: number]: SpeechRecognitionAlternative;
+  isFinal: boolean;
+}
+
+interface SpeechRecognitionAlternative {
+  transcript: string;
+  confidence: number;
+}
+
+interface SpeechRecognition extends EventTarget {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  start(): void;
+  stop(): void;
+  abort(): void;
+  onstart: ((this: SpeechRecognition, ev: Event) => any) | null;
+  onend: ((this: SpeechRecognition, ev: Event) => any) | null;
+  onerror: ((this: SpeechRecognition, ev: any) => any) | null;
+  onresult:
+    | ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => any)
+    | null;
+}
+
+interface Window {
+  SpeechRecognition: {
+    new (): SpeechRecognition;
+  };
+  webkitSpeechRecognition: {
+    new (): SpeechRecognition;
+  };
+}
+
 type Pt = { x: number; y: number };
 type StrokePoint = { x: number; y: number; t: number; w: number };
 type BBox = { minX: number; minY: number; maxX: number; maxY: number };
@@ -423,7 +471,7 @@ function parseSpokenNumber(text: string): number | null {
 /* ------------------------------- main component ------------------------------ */
 
 const fontStack =
-  'Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"';
+  'Lexend Deca, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"';
 
 // SVG Icons
 const Icons = {
@@ -1071,16 +1119,12 @@ export default function App() {
     return () => clearTimeout(timer);
   }, []);
 
-  /* ------------------------------- VAD / Voice ------------------------------ */
-  const vadContextRef = useRef<AudioContext | null>(null);
-  const vadAnalyserRef = useRef<AnalyserNode | null>(null);
-  const vadSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
-  const vadStreamRef = useRef<MediaStream | null>(null);
-  const vadIntervalRef = useRef<number>(0);
-
+  /* -------------------------- Voice / TTS Refs -------------------------- */
   const speechRecRef = useRef<any>(null);
   const voiceRef = useRef<SpeechSynthesisVoice | null>(null);
-  // Guard to prevent self-triggering
+  const handleVoiceCommandRef = useRef<((t: string) => void) | null>(null);
+
+  // Guard to prevent self-triggering and handle command timing
   const ttsGuardRef = useRef({
     speaking: false,
     lastSpoken: "",
@@ -1089,92 +1133,16 @@ export default function App() {
     lastCmd: { text: "", at: 0 },
   });
 
-  const handleVoiceCommandRef = useRef<((t: string) => void) | null>(null);
-
-  // Initialize VAD
-  useEffect(() => {
-    // Only run VAD if voice is locally enabled
-    if (!voiceOn) return;
-
-    (async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-        });
-        vadStreamRef.current = stream;
-
-        const ctx = new (
-          window.AudioContext || (window as any).webkitAudioContext
-        )();
-        vadContextRef.current = ctx;
-
-        const source = ctx.createMediaStreamSource(stream);
-        vadSourceRef.current = source;
-
-        const analyser = ctx.createAnalyser();
-        analyser.fftSize = 256;
-        source.connect(analyser);
-        vadAnalyserRef.current = analyser;
-
-        const dataArray = new Uint8Array(analyser.frequencyBinCount);
-
-        // VAD Loop
-        window.clearInterval(vadIntervalRef.current);
-        vadIntervalRef.current = window.setInterval(() => {
-          // If already speaking, or TTS is active, or Rec is active, don't trigger
-          if (
-            ttsGuardRef.current.speaking ||
-            ttsGuardRef.current.ignoreUntil > performance.now()
-          )
-            return;
-
-          // Check if recognition is already active (approximate check via internal state or if we know we started it)
-          // We'll trust the browser to throw error or handle partial overlap, but best to avoid calling start() if active.
-          // Since we can't easily peek into SpeechRecognition state property, we rely on the `onend` callback to re-arm.
-
-          analyser.getByteFrequencyData(dataArray);
-          // Calculate average volume
-          let sum = 0;
-          for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
-          const avg = sum / dataArray.length;
-
-          // Threshold (adjustable). 20-30 is usually good for background noise vs speech.
-          if (avg > 25) {
-            const rec = speechRecRef.current;
-            if (rec) {
-              try {
-                rec.start();
-                // Pause VAD for a bit to let Rec take over?
-                // Actually, Rec will fire 'onstart' which we can track.
-                // But `start()` determines if it's active.
-                // If we call start() while active, it throws.
-              } catch (e: any) {
-                // Ignore "already started" errors
-              }
-            }
-          }
-        }, 100);
-      } catch (e) {
-        console.warn("[VAD] Failed to init mic for VAD:", e);
-      }
-    })();
-
-    return () => {
-      window.clearInterval(vadIntervalRef.current);
-      vadStreamRef.current?.getTracks().forEach((t) => t.stop());
-      vadContextRef.current?.close();
-    };
-  }, [voiceOn]);
-
   // Inject a nicer font (Inter) if the project doesn't already provide it.
+
   useEffect(() => {
-    const id = "neon-font-inter";
+    const id = "neon-font-lexend";
     if (document.getElementById(id)) return;
     const link = document.createElement("link");
     link.id = id;
     link.rel = "stylesheet";
     link.href =
-      "https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&display=swap";
+      "https://fonts.googleapis.com/css2?family=Lexend+Deca:wght@100..900&display=swap";
     document.head.appendChild(link);
     return () => link.remove();
   }, []);
@@ -1261,6 +1229,25 @@ export default function App() {
 
     window.speechSynthesis.speak(u);
   }, []);
+
+  /* ------------------------------ voice helpers ------------------------------ */
+  const effectiveColorForHand = useCallback((isAdmin: boolean) => {
+    if (!isAdmin && Date.now() < guestUnlockUntilRef.current) return "#000000";
+    return settingsRef.current.brushColor;
+  }, []);
+
+  const textMatches = (text: string, phrases: string[]) =>
+    phrases.some((p) => text.includes(p));
+
+  const voiceSystemReset = useCallback(() => {
+    try {
+      speechRecRef.current?.abort();
+    } catch {}
+    speechRecRef.current = null;
+    setVoiceOn(false);
+    setTimeout(() => setVoiceOn(true), 100);
+    speak("Voice system reset.");
+  }, [speak]);
 
   /* ------------------------------ canvas sizing ------------------------------ */
   const resizeCanvasesToVideo = useCallback(() => {
@@ -2049,408 +2036,6 @@ export default function App() {
     },
     [speak],
   );
-
-  /* ------------------------------ voice commands ------------------------------ */
-  const effectiveColorForHand = useCallback((isAdmin: boolean) => {
-    if (!isAdmin && Date.now() < guestUnlockUntilRef.current) return "#000000";
-    return settingsRef.current.brushColor;
-  }, []);
-
-  /* -------------------------------- voice -------------------------------- */
-  const textMatches = (text: string, phrases: string[]) =>
-    phrases.some((p) => text.includes(p));
-
-  const handleVoiceCommand = useCallback(
-    (text: string) => {
-      const t = text.toLowerCase();
-
-      if (!t.includes("flux")) {
-        console.log("[Voice] Ignored - no 'Flux' keyword:", t);
-        return;
-      }
-
-      // STRICT EXPORT COMMANDS
-      if (
-        t.includes("export") ||
-        t.includes("share") ||
-        t.includes("send") ||
-        t.includes("share to") ||
-        t.includes("save to") ||
-        t.includes("export to")
-      ) {
-        if (
-          textMatches(t, [
-            "whatsapp",
-            "whats app",
-            "what's up",
-            "what's app",
-            "wassup",
-          ])
-        ) {
-          speak("Sharing to WhatsApp...");
-          return void sharePng("whatsapp");
-        }
-        if (textMatches(t, ["instagram", "insta"])) {
-          speak("Sharing to Instagram...");
-          return void sharePng("instagram");
-        }
-        if (
-          textMatches(t, [
-            "tiktok",
-            "tic toc",
-            "tik tok",
-            "tick tock",
-            "teek tuck",
-            "teek tok",
-            "tick tuck",
-          ])
-        ) {
-          speak("Sharing to TikTok...");
-          return void sharePng("tiktok");
-        }
-        if (
-          textMatches(t, ["telegram", "telegramm", "tele gram", "tele gramm"])
-        ) {
-          speak("Sharing to Telegram...");
-          return void sharePng("telegram");
-        }
-        if (textMatches(t, ["facebook", "fb"])) {
-          speak("Sharing to Facebook...");
-          return void sharePng("facebook");
-        }
-        if (
-          textMatches(t, ["twitter", "x.com", "tweet", "x", "ex", "ex.com"])
-        ) {
-          speak("Sharing to X...");
-          return void sharePng("x");
-        }
-
-        if (t.includes("png")) return void downloadPng();
-        if (t.includes("jpg") || t.includes("jpeg")) return void downloadJpg();
-        if (t.includes("svg") || t.includes("vector"))
-          return void handleSessionExport("svg");
-        if (
-          t.includes("video") ||
-          t.includes("mp4") ||
-          t.includes("movie") ||
-          t.includes("animation") ||
-          t.includes("gif")
-        )
-          return void handleSessionExport("mp4");
-
-        if (
-          t.includes("file") ||
-          t.includes("download") ||
-          t.includes("save") ||
-          t.includes("image")
-        )
-          return void downloadPng();
-
-        return void sharePng(); // Default share
-      }
-
-      // CAMERA COMMANDS
-      if (t.includes("camera") || t.includes("cam") || t.includes("view")) {
-        if (
-          t.includes("swap") ||
-          t.includes("switch") ||
-          t.includes("flip") ||
-          t.includes("change") ||
-          t.includes("switch")
-        ) {
-          setFacingMode((f: "user" | "environment") =>
-            f === "user" ? "environment" : "user",
-          );
-          speak("Swapping camera.");
-          return;
-        }
-      }
-      if (t.includes("thanks")) {
-        speak("You're welcome!");
-        return;
-      }
-      if (t.includes("thank you")) {
-        speak("Welli thank you");
-        return;
-      }
-      if (
-        t.includes("hello") ||
-        t.includes("hi") ||
-        t.includes("hi there") ||
-        t.includes("hi there.")
-      ) {
-        speak("Hello! How can I help you?");
-        return;
-      }
-      if (t.includes("goodbye") || t.includes("bye")) {
-        speak("Goodbye! Have a great day!");
-        return;
-      }
-      if (
-        t.includes("how are you") ||
-        t.includes("wassup") ||
-        t.includes("how you doing?") ||
-        t.includes("how you doing?")
-      ) {
-        speak("I'm doing great, thank you! How about you?");
-        return;
-      }
-      if (t.includes("i'm good") || t.includes("i'm doing good")) {
-        speak("That's great!");
-        return;
-      }
-      if (t.includes("clear")) {
-        clearAll();
-        speak("Canvas cleared.");
-        return;
-      }
-      if (t.includes("erase")) {
-        setEraserMode(true);
-        speak("Eraser mode enabled. Use your index finger to erase.");
-        return;
-      }
-
-      if (t.includes("remove") || t.includes("delete")) {
-        if (
-          t.includes("all") ||
-          t.includes("canvas") ||
-          t.includes("everything") ||
-          t === "flux clear" ||
-          t === "flux clear."
-        ) {
-          clearAll();
-          return;
-        }
-
-        // AR Items
-        if (t.includes("hat")) {
-          setArItems((p) => ({ ...p, hat: false }));
-          speak("Hat removed.");
-          return;
-        }
-        if (t.includes("glasses")) {
-          setArItems((p) => ({ ...p, glasses: false }));
-          speak("Glasses removed.");
-          return;
-        }
-      }
-
-      // AR Add Commands
-      if (t.includes("add") || t.includes("wear") || t.includes("put on")) {
-        if (t.includes("hat")) {
-          setArItems((p) => ({ ...p, hat: true }));
-          speak("Hat added.");
-          return;
-        }
-        if (t.includes("glasses") || t.includes("shades")) {
-          setArItems((p) => ({ ...p, glasses: true }));
-          speak("Glasses added.");
-          return;
-        }
-      }
-
-      // Type 2: Eraser Mode (Partial)
-      if (t.includes("eraser mode") || t.includes("eraser tool")) {
-        settingsRef.current.eraserMode = true;
-        setEraserMode(true);
-        speak("Eraser mode enabled. Use your index finger to erase.");
-        return;
-      }
-      if (t.includes("draw mode") || t.includes("brush") || t.includes("pen")) {
-        settingsRef.current.eraserMode = false;
-        setEraserMode(false);
-        speak("Draw mode enabled.");
-        return;
-      }
-
-      // Shapes
-      if (t.includes("draw") || t.includes("create") || t.includes("make")) {
-        let shape = "";
-        if (t.includes("circle")) shape = "circle";
-        else if (t.includes("square") || t.includes("box")) shape = "square";
-        else if (t.includes("triangle")) shape = "triangle";
-        else if (t.includes("heart")) shape = "heart";
-        else if (t.includes("star")) shape = "star";
-        else if (t.includes("arrow")) shape = "arrow";
-
-        if (shape) {
-          const size =
-            t.includes("big") || t.includes("large")
-              ? "big"
-              : t.includes("small") || t.includes("tiny")
-                ? "small"
-                : "medium";
-          drawShapeAtCenter(shape as any, size, settingsRef.current.brushColor);
-          return;
-        }
-      }
-
-      // Toggles
-      if (t.includes("glow")) {
-        if (t.includes("on") || t.includes("enable")) {
-          setGlow(true);
-          speak("Glow on.");
-        } else if (t.includes("off") || t.includes("disable")) {
-          setGlow(false);
-          speak("Glow off.");
-        }
-        return;
-      }
-      if (t.includes("skeleton") || t.includes("landmarks")) {
-        if (t.includes("show") || t.includes("on")) {
-          setShowLandmarks(true);
-          speak("Skeleton visible.");
-        } else {
-          setShowLandmarks(false);
-          speak("Skeleton hidden.");
-        }
-        return;
-      }
-
-      // Victory / Peace -> Mic Test
-      // Note: This is usually triggered by "processInteractions" not voice,
-      // but we can add voice command for it too?
-      // Actually, let's keep it here for "voice test" command.
-      if (t.includes("microphone check") || t.includes("voice test")) {
-        speak("Voice systems online. How can I help?");
-        return;
-      }
-
-      if (t.includes("undo")) return undo();
-      if (t.includes("redo")) return redo();
-      if (t.includes("copy")) return void copyToClipboard();
-
-      // Brush properties
-      if (t.includes("color") || t.includes("set brush")) {
-        const m = t.match(/color (to )?(\S+)/i);
-        if (m?.[2]) {
-          setBrushColor(parseCssColorCandidate(m[2]));
-          speak("Color set.");
-          return;
-        }
-      }
-
-      if (
-        t.includes("reset") &&
-        (t.includes("voice") || t.includes("system"))
-      ) {
-        return voiceSystemReset();
-      }
-
-      speak("Command not recognized.");
-    },
-    [
-      clearAll,
-      drawShapeAtCenter,
-      downloadPng,
-      redo,
-      speak,
-      undo,
-      copyToClipboard,
-      sharePng,
-    ],
-  );
-
-  const voiceSystemReset = useCallback(() => {
-    try {
-      speechRecRef.current?.abort();
-    } catch {}
-    speechRecRef.current = null;
-    setVoiceOn(false);
-    setTimeout(() => setVoiceOn(true), 100);
-    speak("Voice system reset.");
-  }, [speak]);
-
-  useEffect(() => {
-    handleVoiceCommandRef.current = handleVoiceCommand;
-  }, [handleVoiceCommand]);
-
-  const setupSpeechRecognition = useCallback(() => {
-    const w = window as any;
-    const SR = w.SpeechRecognition || w.webkitSpeechRecognition;
-    if (!SR) {
-      setVoiceHint("Voice not supported. Try Chrome/Edge.");
-      return null;
-    }
-
-    const rec = new SR();
-    rec.lang = "en-US";
-    rec.continuous = true;
-    rec.interimResults = true;
-    rec.maxAlternatives = 1;
-
-    rec.onresult = (event: any) => {
-      const guard = ttsGuardRef.current;
-      const now = performance.now();
-      if (guard.speaking || now < guard.ignoreUntil) return;
-
-      let finalText = "";
-      let interim = "";
-
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const res = event.results[i];
-        let txt = res[0].transcript.trim();
-        // [FIX] Strip punctuation that might break exact matches or includes
-        txt = txt.replace(/[.,?!]/g, "");
-
-        if (res.isFinal) finalText += (finalText ? " " : "") + txt;
-        else interim += (interim ? " " : "") + txt;
-      }
-
-      const ft = finalText.toLowerCase().trim();
-      const echo =
-        guard.lastSpoken &&
-        (ft === guard.lastSpoken || ft.includes(guard.lastSpoken));
-      if (echo) return;
-
-      if (ft && guard.lastCmd.text === ft && now - guard.lastCmd.at < 1800)
-        return;
-      if (ft) guard.lastCmd = { text: ft, at: now };
-
-      if (interim) setVoiceHint(`Heard: "${interim}"`);
-      if (finalText) {
-        setVoiceHint(`Command: "${finalText}"`);
-        handleVoiceCommandRef.current?.(finalText);
-      }
-    };
-
-    rec.onstart = () => {
-      setVoiceHint('Mic active. Try "brush red" or "glow off".');
-      console.log("[Voice] Started.");
-      setIsListening(true);
-    };
-
-    rec.onend = () => {
-      console.log("[Voice] Ended.");
-      setIsListening(false);
-      // [FIX] Removed auto-restart. VAD will restart it when sound is detected.
-    };
-
-    rec.onerror = (e: any) => {
-      console.warn("[Voice] Error:", e.error);
-      if (e.error === "not-allowed")
-        setVoiceHint("Mic blocked. Click Mic once to allow.");
-      else if (e.error !== "no-speech") setVoiceHint(`Voice error: ${e.error}`);
-    };
-
-    // [RAM] cleanup on unmount to prevent leaks
-    return () => {
-      try {
-        rec.stop();
-        rec.abort();
-      } catch {}
-    };
-  }, []);
-
-  // [FIX] Initialize Speech Recognition
-  useEffect(() => {
-    if (voiceOn && !speechRecRef.current) {
-      const rec = setupSpeechRecognition();
-      if (rec) {
-        speechRecRef.current = rec;
-      }
-    }
-  }, [voiceOn, setupSpeechRecognition]);
 
   /* ------------------------------ camera + model boot ------------------------------ */
   const mobileCached = useMemo(() => window.innerWidth <= 1024, []);
@@ -3736,29 +3321,6 @@ export default function App() {
     };
   }, [fullRedraw, renderOverlay]);
 
-  /* ------------------------------ voice toggle ------------------------------ */
-  useEffect(() => {
-    if (!voiceOn) {
-      try {
-        speechRecRef.current?.stop();
-      } catch {}
-      setVoiceHint("Mic off.");
-      return;
-    }
-
-    if (!speechRecRef.current) speechRecRef.current = setupSpeechRecognition();
-    const rec = speechRecRef.current;
-    if (!rec) return;
-
-    try {
-      rec.start();
-    } catch (e: any) {
-      if (e.name !== "InvalidStateError") {
-        console.warn("[Voice] Start error:", e);
-      }
-    }
-  }, [setupSpeechRecognition, voiceOn]);
-
   /* ------------------------------ UI state -> settingsRef ------------------------------ */
 
   useEffect(() => {
@@ -3826,6 +3388,227 @@ export default function App() {
   ) => {
     drawShapeAtCenter(shape, "small", settingsRef.current.brushColor);
   };
+
+  /* -------------------------- Voice Command Handling ------------------------- */
+  const handleVoiceCommand = useCallback(
+    (transcript: string) => {
+      const lower = transcript.toLowerCase().trim();
+      console.log("[Voice] Command:", lower);
+
+      // Feedback
+      // setVoiceHint(`Heard: "${lower}"`);
+
+      // 1. COLORS
+      if (
+        lower.includes("color") ||
+        lower.includes("colour") ||
+        lower.includes("make it")
+      ) {
+        const words = lower.split(" ");
+        // Try to find a valid color in the words
+        for (const w of words) {
+          const c = parseCssColorCandidate(w);
+          if (c !== w) {
+            // It's a known color name that got mapped
+            settingsRef.current.brushColor = c;
+            setBrushColor(c);
+            speak(`Color set to ${w}`);
+            return;
+          }
+        }
+      }
+
+      // 2. THICKNESS
+      if (
+        lower.includes("thickness") ||
+        lower.includes("size") ||
+        lower.includes("width") ||
+        lower.includes("brush size")
+      ) {
+        const val = parseSpokenNumber(lower);
+        if (val !== null) {
+          const clamped = clamp(val, 1, 40);
+          settingsRef.current.baseThickness = clamped;
+          setBaseThickness(clamped);
+          speak(`Thickness set to ${clamped}`);
+          return;
+        }
+      }
+
+      // 3. TOOLS / MODES
+      if (lower.includes("eraser")) {
+        if (
+          lower.includes("off") ||
+          lower.includes("disable") ||
+          lower.includes("stop")
+        ) {
+          settingsRef.current.eraserMode = false;
+          setEraserMode(false);
+          speak("Eraser off, drawing mode.");
+        } else {
+          settingsRef.current.eraserMode = true;
+          setEraserMode(true);
+          speak("Eraser mode.");
+        }
+        return;
+      }
+      if (
+        lower.includes("draw") ||
+        lower.includes("pen") ||
+        lower.includes("brush")
+      ) {
+        settingsRef.current.eraserMode = false;
+        setEraserMode(false);
+        speak("Drawing mode.");
+        return;
+      }
+
+      if (lower.includes("undo")) {
+        undo();
+        return;
+      }
+      if (lower.includes("redo")) {
+        redo();
+        return;
+      }
+      if (
+        lower.includes("clear") ||
+        lower.includes("delete all") ||
+        lower.includes("reset canvas")
+      ) {
+        clearAll();
+        return;
+      }
+
+      // 4. EXPORT
+      if (
+        lower.includes("export") ||
+        lower.includes("save") ||
+        lower.includes("download")
+      ) {
+        if (lower.includes("png") || lower.includes("image")) {
+          void downloadPng();
+          return;
+        }
+        if (lower.includes("jpg") || lower.includes("jpeg")) {
+          void downloadJpg();
+          return;
+        }
+        if (lower.includes("svg") || lower.includes("vector")) {
+          void handleSessionExport("svg");
+          return;
+        }
+        // default
+        void downloadPng();
+        return;
+      }
+
+      // 5. FX
+      if (lower.includes("glow")) {
+        if (lower.includes("off")) {
+          settingsRef.current.glow = false;
+          setGlow(false);
+          speak("Glow disabled.");
+        } else {
+          settingsRef.current.glow = true;
+          setGlow(true);
+          speak("Glow enabled.");
+        }
+        needsFullRedrawRef.current = true;
+        return;
+      }
+    },
+    [
+      undo,
+      redo,
+      clearAll,
+      downloadPng,
+      downloadJpg,
+      speak,
+      handleSessionExport,
+    ],
+  );
+
+  handleVoiceCommandRef.current = handleVoiceCommand;
+
+  /* -------------------------- Speech Recognition Init ------------------------- */
+  useEffect(() => {
+    if (!voiceOn) {
+      if (speechRecRef.current) {
+        try {
+          speechRecRef.current.stop();
+        } catch {}
+      }
+      setIsListening(false);
+      return;
+    }
+
+    const SpeechRecognition =
+      (window as any).SpeechRecognition ||
+      (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      console.warn("SpeechRecognition not supported in this browser.");
+      setVoiceHint("Voice control not supported in this browser.");
+      return;
+    }
+
+    const rec = new SpeechRecognition();
+    rec.continuous = true;
+    rec.interimResults = false;
+    rec.lang = "en-US";
+
+    rec.onstart = () => {
+      console.log("[Voice] Recognition started");
+      setIsListening(true);
+    };
+
+    rec.onend = () => {
+      console.log("[Voice] Recognition ended");
+      setIsListening(false);
+      if (voiceOnRef.current && !ttsGuardRef.current.suppressAutoRestart) {
+        setTimeout(() => {
+          if (voiceOnRef.current) {
+            try {
+              rec.start();
+            } catch {}
+          }
+        }, 1000);
+      }
+    };
+
+    rec.onerror = (e: any) => {
+      console.warn("[Voice] Error:", e.error);
+      if (e.error === "not-allowed") {
+        setVoiceHint("Microphone permission denied.");
+        setVoiceOn(false);
+      }
+    };
+
+    rec.onresult = (e: SpeechRecognitionEvent) => {
+      if (ttsGuardRef.current.speaking) return;
+      const res = e.results[e.resultIndex];
+      if (res.isFinal) {
+        const trans = res[0].transcript;
+        if (handleVoiceCommandRef.current) {
+          handleVoiceCommandRef.current(trans);
+        }
+      }
+    };
+
+    speechRecRef.current = rec;
+    try {
+      rec.start();
+    } catch (e) {
+      console.warn("[Voice] Start error:", e);
+    }
+
+    return () => {
+      if (speechRecRef.current === rec) {
+        rec.onend = null;
+        rec.stop();
+      }
+    };
+  }, [voiceOn, handleVoiceCommand]);
 
   return (
     <div className="app-container">
@@ -3952,7 +3735,6 @@ export default function App() {
           </div>
         )}
 
-        {/* Left Stack */}
         <div className="stack-left">
           <button className="btn icon-only" onClick={undo}>
             <Icons.Undo />
@@ -3985,19 +3767,7 @@ export default function App() {
             className={`btn icon-only ${voiceOn ? "btn-primary" : ""}`}
             onClick={() => setVoiceOn(!voiceOn)}
           >
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-              <line x1="12" y1="19" x2="12" y2="23" />
-              <line x1="8" y1="23" x2="16" y2="23" />
-            </svg>
+            {voiceOn ? <Icons.MicOn /> : <Icons.MicOff />}
           </button>
         </div>
 

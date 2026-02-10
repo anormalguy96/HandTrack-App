@@ -9,7 +9,7 @@
   --warn: #ffcc66;
   --danger: #ff5566;
   --font-stack:
-    "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Lexend Deca", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
     Helvetica, Arial, sans-serif;
   --glass: blur(16px);
   --glow-shadow: 0 0 20px rgba(105, 240, 174, 0.4);
@@ -340,14 +340,14 @@ select option {
   .corner-bl {
     /* Last changes 2026: Slightly up, slightly right */
     position: absolute;
-    bottom: calc(30px + env(safe-area-inset-bottom));
+    bottom: calc(45px + env(safe-area-inset-bottom));
     left: 25px;
     z-index: 30;
   }
   .corner-br {
     /* Last changes 2026: Slightly up, slightly left */
     position: absolute;
-    bottom: calc(30px + env(safe-area-inset-bottom));
+    bottom: calc(45px + env(safe-area-inset-bottom));
     right: 25px;
     z-index: 30;
   }
