@@ -902,6 +902,7 @@ function getMapScale(
       offsetY: 0,
     };
   }
+
   const scale =
     objectFit === "cover"
       ? Math.max(canvasW / videoW, canvasH / videoH)
@@ -910,10 +911,10 @@ function getMapScale(
   const visualW = videoW * scale;
   const visualH = videoH * scale;
 
-  // For contain/cover we need to center the active area
-  // [FIX] Ensure positive offsets
-  const offsetX = Math.max(0, (visualW - canvasW) / 2);
-  const offsetY = Math.max(0, (visualH - canvasH) / 2);
+  // Center the visual area within the canvas
+  const offsetX = (visualW - canvasW) / 2;
+  const offsetY = (visualH - canvasH) / 2;
+
   return { scaleX: scale, scaleY: scale, offsetX, offsetY };
 }
 
@@ -2186,20 +2187,46 @@ export default function App() {
 
       console.log("[startCamera] Waiting for loadedmetadata or readyState...");
 
-      if (v.readyState < 1) {
+      if (v.readyState < 2) {
+        console.log("[startCamera] Waiting for have_current_data or better...");
         await new Promise<void>((resolve) => {
           const timeout = setTimeout(() => {
-            console.warn("[startCamera] Metadata timeout - proceeding anyway");
+            console.warn(
+              "[startCamera] Playability timeout - proceeding anyway",
+            );
+            v.removeEventListener("canplay", onCanPlay);
             v.removeEventListener("loadedmetadata", onMeta);
             resolve();
-          }, 3000);
+          }, 4000);
+
           const onMeta = () => {
             console.log("[startCamera] Metadata loaded");
+            if (v.readyState >= 2) {
+              clearTimeout(timeout);
+              v.removeEventListener("canplay", onCanPlay);
+              v.removeEventListener("loadedmetadata", onMeta);
+              resolve();
+            }
+          };
+
+          const onCanPlay = () => {
+            console.log("[startCamera] Can play now");
             clearTimeout(timeout);
+            v.removeEventListener("canplay", onCanPlay);
             v.removeEventListener("loadedmetadata", onMeta);
             resolve();
           };
+
           v.addEventListener("loadedmetadata", onMeta);
+          v.addEventListener("canplay", onCanPlay);
+
+          // Final check in case it fired while setting up listeners
+          if (v.readyState >= 2) {
+            clearTimeout(timeout);
+            v.removeEventListener("canplay", onCanPlay);
+            v.removeEventListener("loadedmetadata", onMeta);
+            resolve();
+          }
         });
       }
 
@@ -3587,6 +3614,18 @@ export default function App() {
           speak("Glow enabled.");
         }
         needsFullRedrawRef.current = true;
+        return;
+      }
+
+      // 6. CAMERA / SYSTEM
+      if (lower.includes("swap camera") || lower.includes("change camera")) {
+        setFacingMode((f) => (f === "user" ? "environment" : "user"));
+        speak("Swapping camera.");
+        return;
+      }
+
+      if (lower.includes("reset voice") || lower.includes("restart voice")) {
+        voiceSystemReset();
         return;
       }
     },

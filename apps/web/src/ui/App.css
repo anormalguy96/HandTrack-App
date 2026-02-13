@@ -310,19 +310,19 @@ select option {
   .stack-left {
     position: absolute;
     left: 10px;
-    top: 60px;
-    bottom: 80px; /* Leave room for bottom corners */
+    top: 45px; /* Reduced from 60px */
+    bottom: 80px;
     display: flex;
     flex-direction: column;
     gap: 16px;
     z-index: 20;
-    pointer-events: none; /* Allow clicks through gaps */
+    pointer-events: none;
   }
 
   .stack-right {
     position: absolute;
     right: 10px;
-    top: 60px;
+    top: 45px; /* Reduced from 60px */
     bottom: 80px;
     display: flex;
     flex-direction: column;
@@ -338,16 +338,18 @@ select option {
 
   /* --- Bottom Corners --- */
   .corner-bl {
-    /* Last changes 2026: Slightly up, slightly right */
     position: absolute;
-    bottom: calc(45px + env(safe-area-inset-bottom));
+    bottom: calc(
+      55px + env(safe-area-inset-bottom)
+    ); /* Moved up by 10px from 45px */
     left: 25px;
     z-index: 30;
   }
   .corner-br {
-    /* Last changes 2026: Slightly up, slightly left */
     position: absolute;
-    bottom: calc(45px + env(safe-area-inset-bottom));
+    bottom: calc(
+      55px + env(safe-area-inset-bottom)
+    ); /* Moved up by 10px from 45px */
     right: 25px;
     z-index: 30;
   }
