@@ -73,8 +73,8 @@
            OpenJDK 64-Bit Server VM (build 21.0.8+-14196175-b1038.72, mixed mode)
 [   +2 ms] Version of Java is different than impacted version, no migration attempted.
 [  +21 ms] CMake project not found, skipping support Android 15 16k page size migration.
-[  +12 ms] Using gradle from D:\GitHub Repositories\HandTrack-App\apps\mobile\android\gradlew.bat.
-[  +19 ms] LocalFile: 'D:\GitHub Repositories\HandTrack-App\apps\mobile\android\build.gradle.kts' doesn't provide an AGP version. Checking settings.
-[   +2 ms] LocalFile: 'D:\GitHub Repositories\HandTrack-App\apps\mobile\android\settings.gradle.kts' provides AGP version: 8.11.1
+[  +12 ms] Using gradle from D:\github_repos\HandTrack-App\apps\mobile\android\gradlew.bat.
+[  +19 ms] LocalFile: 'D:\github_repos\HandTrack-App\apps\mobile\android\build.gradle.kts' doesn't provide an AGP version. Checking settings.
+[   +2 ms] LocalFile: 'D:\github_repos\HandTrack-App\apps\mobile\android\settings.gradle.kts' provides AGP version: 8.11.1
 [   +6 ms] Running Gradle task 'assembleDebug'...
-[   +1 ms] executing: [D:\GitHub Repositories\HandTrack-App\apps\mobile\android/] D:\GitHub Repositories\HandTrack-App\apps\mobile\android\gradlew.bat --full-stacktrace --info -Pverbose=true -Ptarget-platform=android-arm,android-arm64,android-x64 -Ptarget=lib\main.dart -Pbase-application-name=android.app.Application -Pdart-defines=RkxVVFRFUl9WRVJTSU9OPTMuMzguOQ==,RkxVVFRFUl9DSEFOTkVMPXN0YWJsZQ==,RkxVVFRFUl9HSVRfVVJMPWh0dHBzOi8vZ2l0aHViLmNvbS9mbHV0dGVyL2ZsdXR0ZXIuZ2l0,RkxVVFRFUl9GUkFNRVdPUktfUkVWSVNJT049NjczMjNkZTI4NQ==,RkxVVFRFUl9FTkdJTkVfUkVWSVNJT049NTg3YzE4Zjg3Mw==,RkxVVFRFUl9EQVJUX1ZFUlNJT049My4xMC44 -Pdart-obfuscation=false -Ptrack-widget-creation=true -Ptree-shake-icons=false assembleDebug
+[   +1 ms] executing: [D:\github_repos\HandTrack-App\apps\mobile\android/] D:\github_repos\HandTrack-App\apps\mobile\android\gradlew.bat --full-stacktrace --info -Pverbose=true -Ptarget-platform=android-arm,android-arm64,android-x64 -Ptarget=lib\main.dart -Pbase-application-name=android.app.Application -Pdart-defines=RkxVVFRFUl9WRVJTSU9OPTMuMzguOQ==,RkxVVFRFUl9DSEFOTkVMPXN0YWJsZQ==,RkxVVFRFUl9HSVRfVVJMPWh0dHBzOi8vZ2l0aHViLmNvbS9mbHV0dGVyL2ZsdXR0ZXIuZ2l0,RkxVVFRFUl9GUkFNRVdPUktfUkVWSVNJT049NjczMjNkZTI4NQ==,RkxVVFRFUl9FTkdJTkVfUkVWSVNJT049NTg3YzE4Zjg3Mw==,RkxVVFRFUl9EQVJUX1ZFUlNJT049My4xMC44 -Pdart-obfuscation=false -Ptrack-widget-creation=true -Ptree-shake-icons=false assembleDebug

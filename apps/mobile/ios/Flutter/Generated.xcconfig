@@ -1,6 +1,6 @@
 // This is a generated file; do not edit or check into version control.
 FLUTTER_ROOT=D:\flutter
-FLUTTER_APPLICATION_PATH=D:\GitHub Repositories\HandTrack-App\apps\mobile
+FLUTTER_APPLICATION_PATH=D:\github_repos\HandTrack-App\apps\mobile
 COCOAPODS_PARALLEL_CODE_SIGN=true
 FLUTTER_TARGET=lib\main.dart
 FLUTTER_BUILD_DIR=build

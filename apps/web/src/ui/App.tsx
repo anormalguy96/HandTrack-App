@@ -312,7 +312,8 @@ type Track = {
   pointFilter: OneEuro2D;
   pinchFilter: OneEuro2D;
   palmFilter: OneEuro2D;
-
+  scaleFilter: LowPass; // Add this
+  smoothedScalePx: number; // Add this
   stablePoint: number;
   stablePalm: number;
 
@@ -1350,32 +1351,16 @@ export default function App() {
     ) => {
       // PERF: Minimal state changes here. lineCap/Join should be set once per frame outside.
       ctx.strokeStyle = color;
-
       if (glow) {
-        // [FIX] Fake Glow Technique (10-20x faster than shadowBlur)
-        // Pass 1: Wide, very faint
-        ctx.globalAlpha = 0.12;
-        ctx.lineWidth = b.w + 14;
-        ctx.beginPath();
-        ctx.moveTo(a.x, a.y);
-        ctx.lineTo(b.x, b.y);
-        ctx.stroke();
-
-        // Pass 2: Medium, faint
-        ctx.globalAlpha = 0.25;
-        ctx.lineWidth = b.w + 6;
-        ctx.beginPath();
-        ctx.moveTo(a.x, a.y);
-        ctx.lineTo(b.x, b.y);
-        ctx.stroke();
-
-        // Pass 3: Core, solid
         ctx.globalAlpha = 1.0;
         ctx.lineWidth = b.w;
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = color;
         ctx.beginPath();
         ctx.moveTo(a.x, a.y);
         ctx.lineTo(b.x, b.y);
         ctx.stroke();
+        ctx.shadowBlur = 0;
       } else {
         ctx.globalAlpha = 1.0;
         ctx.lineWidth = b.w;
@@ -2171,9 +2156,10 @@ export default function App() {
         // We explicitly ask for Height > Width to force the hardware into portrait mode if available.
         // We do NOT set aspectRatio because some browsers/drivers prioritize it over W/H or get confused.
         constraints.video = {
-          width: { min: 720, ideal: 1080, max: 1440 },
-          height: { min: 1280, ideal: 1920, max: 2560 },
-          facingMode: "user", // Usually implies portrait on phones
+          // 720p is the sweet spot for MediaPipe on mobile
+          width: { ideal: 720 },
+          height: { ideal: 1280 },
+          facingMode: "user",
         };
       } else {
         // [DESKTOP] Landscape
@@ -2275,7 +2261,8 @@ export default function App() {
             settingsRef.current.oneEuroMinCutoff,
             settingsRef.current.oneEuroBeta,
           ),
-
+          scaleFilter: new LowPass(0.15), // Smooth factor (0.1 = slow/smooth, 0.9 = fast/jittery)
+          smoothedScalePx: det.scalePx,
           stablePoint: 0,
           stablePalm: 0,
 
@@ -2350,6 +2337,7 @@ export default function App() {
       const tracks = tracksRef.current;
 
       const act = tracks.map((tr) => {
+        const det = tr.det;
         tr.pointFilter.set(
           settingsRef.current.oneEuroMinCutoff,
           settingsRef.current.oneEuroBeta,
@@ -2362,8 +2350,9 @@ export default function App() {
           settingsRef.current.oneEuroMinCutoff,
           settingsRef.current.oneEuroBeta,
         );
+        // Filter the raw scale
+        tr.smoothedScalePx = tr.scaleFilter.filter(det.scalePx);
 
-        const det = tr.det;
         const allowed = isAllowedToControl(tr);
 
         tr.stablePoint = det.rawPoint
@@ -2531,11 +2520,11 @@ export default function App() {
             rotateStroke(tr.selectedStrokeId, relAng);
 
           const rel = clamp(
-            det.scalePx / Math.max(1, tr.pinchStartScalePx),
+            tr.smoothedScalePx / Math.max(1, tr.pinchStartScalePx),
             0.92,
             1.08,
           );
-          tr.pinchStartScalePx = det.scalePx;
+          tr.pinchStartScalePx = tr.smoothedScalePx;
           if (Math.abs(rel - 1) > 0.01) scaleStroke(tr.selectedStrokeId, rel);
         }
 
@@ -4347,18 +4336,6 @@ export default function App() {
         />
         <canvas ref={inferCanvasRef} style={{ display: "none" }} />
       </div>
-
-      {/* Shared Canvas Wrapper mounted once */}
-      {/* But wait, my CSS defines .mobile-layout as Flex and .desktop-layout as Grid columns 
-        The css for .app-container on desktop is "grid 340px 1fr".
-        So the canvas wrapper *must* be the second child of app-container for desktop grid work.
-    */}
-      {/* Fix:
-       The Canvas Wrapper should be a direct child of app-container.
-       Mobile CSS hides .desktop-layout (sidebar).
-       Mobile CSS styles .canvas-wrapper as absolute centered.
-       Desktop CSS styles .canvas-wrapper as grid item.
-    */}
     </div>
   );
 }
