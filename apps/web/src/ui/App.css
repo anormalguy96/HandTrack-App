@@ -394,7 +394,7 @@ select option {
   }
 
   .video-layer {
-    object-fit: contain; /* Changed from cover to show full camera feed */
+    object-fit: cover; /* Changed back to cover to prevent letterboxing */
     transform: none;
     transform-origin: center;
     border-radius: 0;

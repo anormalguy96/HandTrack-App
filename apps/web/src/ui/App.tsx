@@ -1094,7 +1094,7 @@ export default function App() {
   /* ------------------------------- settings ------------------------------- */
   const settingsRef = useRef({
     showLandmarks: true,
-    glow: true,
+    glow: window.innerWidth > 1024,
     brushColor: "#69F0AE",
     baseThickness: 6,
     eraserMode: false, // New eraser mode (Type 2)
@@ -2152,24 +2152,13 @@ export default function App() {
 
       let constraints: MediaStreamConstraints = { audio: false };
 
-      if (mobileCached) {
-        // [MOBILE] Strict Portrait Mode
-        // We explicitly ask for Height > Width to force the hardware into portrait mode if available.
-        // We do NOT set aspectRatio because some browsers/drivers prioritize it over W/H or get confused.
-        constraints.video = {
-          // 720p is the sweet spot for MediaPipe on mobile
-          width: { ideal: 720 },
-          height: { ideal: 1280 },
-          facingMode: "user",
-        };
-      } else {
-        // [DESKTOP] Landscape
-        constraints.video = {
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-          aspectRatio: { ideal: 16 / 9 },
-        };
-      }
+      // [FIX] Simplified constraints for mobile compatibility
+      // We removed strict 9:16 portrait constraints which trigger OverconstrainedError
+      // on many mobile browsers/devices. Instead we request standard HD.
+      constraints.video = {
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+      };
 
       if (selectedDeviceId) {
         (constraints.video as MediaTrackConstraints).deviceId = {
@@ -2242,9 +2231,9 @@ export default function App() {
 
   // Restart camera when device/facing selection changes
   useEffect(() => {
-    // Only start if ready AND not already trying to play or having a stream
+    // Start if ready. StartCamera will stop the old stream, enabling camera swaps to work correctly.
     const v = videoRef.current;
-    if (ready && v && !v.srcObject) {
+    if (ready && v) {
       startCamera();
     }
   }, [selectedDeviceId, facingMode, ready, startCamera]);
